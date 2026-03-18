@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyVault — Your Digital Study Archive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-orb orb-3"></div>
+
+    <!-- Loading overlay -->
+    <div class="app-loading" id="appLoading">
+        <div class="app-loading-inner">
+            <div class="loading-logo">
+                <svg width="44" height="44" viewBox="0 0 36 36" fill="none">
+                    <rect x="4" y="4" width="28" height="28" rx="6" stroke="url(#gl)" stroke-width="2" fill="none"/>
+                    <path d="M10 13h16M10 18h12M10 23h8" stroke="url(#gl)" stroke-width="2" stroke-linecap="round"/>
+                    <defs><linearGradient id="gl" x1="4" y1="4" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#c9a84c"/><stop offset="100%" stop-color="#e8c97a"/>
+                    </linearGradient></defs>
+                </svg>
+            </div>
+            <p class="loading-text">Loading StudyVault…</p>
+            <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+        </div>
+    </div>
+
+    <!-- Login screen -->
+    <div class="login-screen" id="loginScreen" style="display:none">
+        <div class="login-card">
+            <div class="login-logo-group">
+                <svg width="52" height="52" viewBox="0 0 36 36" fill="none">
+                    <rect x="4" y="4" width="28" height="28" rx="6" stroke="url(#gl2)" stroke-width="2" fill="none"/>
+                    <path d="M10 13h16M10 18h12M10 23h8" stroke="url(#gl2)" stroke-width="2" stroke-linecap="round"/>
+                    <defs><linearGradient id="gl2" x1="4" y1="4" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#c9a84c"/><stop offset="100%" stop-color="#e8c97a"/>
+                    </linearGradient></defs>
+                </svg>
+                <h1 class="login-title">StudyVault</h1>
+            </div>
+            <p class="login-tagline">Your files. Any device. Always in sync.</p>
+            <p class="login-desc">Sign in with Google to access your personal vault from anywhere. Files are stored securely in the cloud.</p>
+            <button class="btn-google" id="googleSignInBtn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continue with Google
+            </button>
+            <p class="login-note">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                Your data is private — only you can access your vault
+            </p>
+        </div>
+    </div>
+
+    <!-- Main app -->
+    <div class="container" id="appContainer" style="display:none">
+
+        <header class="header">
+            <div class="header-inner">
+                <div class="logo-group">
+                    <div class="logo-mark">
+                        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                            <rect x="4" y="4" width="28" height="28" rx="6" stroke="url(#g1)" stroke-width="2" fill="none"/>
+                            <path d="M10 13h16M10 18h12M10 23h8" stroke="url(#g1)" stroke-width="2" stroke-linecap="round"/>
+                            <defs><linearGradient id="g1" x1="4" y1="4" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#c9a84c"/><stop offset="100%" stop-color="#e8c97a"/>
+                            </linearGradient></defs>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="logo-text">StudyVault</h1>
+                        <p class="logo-sub">Organize · Learn · Master</p>
+                    </div>
+                </div>
+
+                <div class="header-actions">
+                    <div class="sync-indicator" id="syncIndicator" title="Cloud sync status">
+                        <span class="sync-dot" id="syncDot"></span>
+                        <span class="sync-label" id="syncLabel">Synced</span>
+                    </div>
+
+                    <div class="user-badge" id="userBadge">
+                        <img class="user-avatar" id="userAvatar" src="" alt="User avatar">
+                        <span class="user-name" id="userName"></span>
+                        <button class="btn btn-ghost btn-sm" id="signOutBtn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Sign out
+                        </button>
+                    </div>
+
+                    <button class="btn btn-ghost" id="clearDataBtn">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                        Clear All
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="breadcrumb" id="breadcrumb">
+            <a href="#" class="crumb crumb-root" data-folder-id="root">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Root
+            </a>
+        </nav>
+
+        <main class="main">
+            <div class="toolbar">
+                <button class="btn btn-primary" id="createFolderBtn">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                    New Folder
+                </button>
+                <button class="btn btn-secondary" id="uploadNotesBtn">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload Notes
+                </button>
+                <button class="btn btn-ghost" id="selectModeBtn">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                    Select
+                </button>
+                <div class="bulk-bar" id="bulkBar">
+                    <button class="btn btn-ghost" id="selectAllBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 11 12 14 22 4"/></svg>
+                        Select All
+                    </button>
+                    <button class="btn btn-ghost" id="deselectAllBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                        Deselect All
+                    </button>
+                    <span class="bulk-count" id="bulkCount">None selected</span>
+                    <button class="btn btn-danger" id="bulkDeleteBtn" disabled>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                        Delete Selected
+                    </button>
+                    <button class="btn btn-ghost btn-ghost--cancel" id="cancelSelectBtn">Cancel</button>
+                </div>
+                <div class="toolbar-info" id="toolbarInfo">
+                    <span class="info-dot"></span>
+                    <span id="toolbarInfoText">Ready</span>
+                </div>
+            </div>
+
+            <div class="folder-grid" id="folderGrid">
+                <div class="empty-state">
+                    <div class="empty-icon"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+                    <p class="empty-title">Your vault is empty</p>
+                    <p class="empty-sub">Create a folder or upload notes to begin.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Create Folder Modal -->
+    <div class="modal" id="createFolderModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title">New Folder</h2>
+                <button class="modal-close" id="closeFolderModalBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <label for="folderNameInput" class="form-label">Folder Name</label>
+                <input type="text" id="folderNameInput" class="form-input" placeholder="e.g. Calculus Notes" maxlength="50" autocomplete="off">
+                <p class="form-hint">Use descriptive names for easy navigation</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="cancelFolderBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmFolderBtn">Create Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Notes Modal -->
+    <div class="modal" id="uploadNotesModal">
+        <div class="modal-card modal-card--wide">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">Upload Notes</h2>
+                    <p class="modal-subtitle">PDF · DOCX · TXT · MD · HTML · JS · JSON &amp; more</p>
+                </div>
+                <button class="modal-close" id="closeUploadModalBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                    <span class="upload-progress-label" id="uploadProgressLabel">Uploading…</span>
+                </div>
+                <div class="drop-zone" id="dropZone">
+                    <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.md,.html,.css,.js,.json,.xml,.csv,.yaml,.yml,.ini,.log" hidden>
+                    <div class="drop-zone-inner">
+                        <div class="drop-icon"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                        <p class="drop-title">Drop files here or <span class="drop-link">browse</span></p>
+                        <div class="drop-badges">
+                            <span class="drop-badge drop-badge--pdf">PDF</span>
+                            <span class="drop-badge drop-badge--docx">DOCX</span>
+                            <span class="drop-badge drop-badge--text">TXT · MD</span>
+                            <span class="drop-badge drop-badge--code">JS · JSON · HTML</span>
+                        </div>
+                        <p class="drop-hint">PDFs upload to Firebase Storage — no browser size limit.</p>
+                    </div>
+                </div>
+                <div class="file-list" id="fileList"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="cancelUploadBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmUploadBtn">Upload Files</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div class="modal" id="renameFolderModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title">Rename Folder</h2>
+                <button class="modal-close" id="closeRenameModalBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <label for="renameInput" class="form-label">New Name</label>
+                <input type="text" id="renameInput" class="form-input" placeholder="Enter new folder name" maxlength="50" autocomplete="off">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="cancelRenameBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmRenameBtn">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Viewer Modal -->
+    <div class="modal" id="viewFileModal">
+        <div class="modal-card modal-card--wide modal-card--viewer">
+            <div class="modal-header">
+                <div class="file-modal-title-group">
+                    <span id="fileViewBadge" class="file-type-badge"></span>
+                    <h2 class="modal-title" id="fileViewTitle">File</h2>
+                </div>
+                <button class="modal-close" id="closeViewModalBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="viewer-body">
+                <div class="viewer-panel" id="panelText"><div class="file-viewer"><pre class="file-content" id="fileContent"></pre></div></div>
+                <div class="viewer-panel" id="panelPdf"><iframe id="pdfFrame" class="pdf-frame" title="PDF Viewer" src="about:blank"></iframe></div>
+                <div class="viewer-panel" id="panelDocx"><div class="docx-viewer" id="docxContent"></div></div>
+                <div class="viewer-panel" id="panelLoading">
+                    <div class="unsupported-msg">
+                        <div class="viewer-spinner"></div>
+                        <p class="unsupported-sub">Loading file…</p>
+                    </div>
+                </div>
+                <div class="viewer-panel" id="panelUnsupported">
+                    <div class="unsupported-msg">
+                        <div class="unsupported-icon"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                        <p class="unsupported-title">Preview not available</p>
+                        <p class="unsupported-sub" id="unsupportedMsg">This file type cannot be previewed.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="closeViewBtn">Close</button>
+                <button class="btn btn-secondary" id="downloadFileBtn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="context-menu" id="contextMenu"></div>
+    <div class="toast" id="toast" role="alert" aria-live="polite">
+        <span class="toast-icon" id="toastIcon"></span>
+        <span class="toast-message" id="toastMessage"></span>
+    </div>
+
+    <!-- Firebase SDK v10 compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <!-- mammoth.js: .docx to HTML in the browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

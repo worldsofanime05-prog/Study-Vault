@@ -539,7 +539,11 @@ const uploader = {
                     formData.append('resource_type', 'raw');
                     this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);
                     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, { method:'POST', body:formData });
-                    if(!res.ok) throw new Error('Cloudinary upload failed');
+                    if(!res.ok) {
+                        const errData = await res.json();
+                        console.error('Cloudinary error details:', JSON.stringify(errData));
+                        throw new Error('Cloudinary upload failed: ' + (errData.error?.message || res.status));
+                    }
                     const data = await res.json();
                     // Build correct public URL
                     const publicUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${data.public_id}`;

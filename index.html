@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -34,6 +34,7 @@
 
     <!-- Login screen -->
     <div class="login-screen" id="loginScreen" style="display:none">
+        <button class="theme-toggle" id="loginThemeBtn" title="Toggle light/dark mode" style="position:fixed;top:1rem;right:1rem;">🌙</button>
         <div class="login-card">
             <div class="login-logo-group">
                 <svg width="52" height="52" viewBox="0 0 36 36" fill="none">
@@ -89,6 +90,8 @@
                         <span class="sync-dot" id="syncDot"></span>
                         <span class="sync-label" id="syncLabel">Synced</span>
                     </div>
+
+                    <button class="theme-toggle" id="themeToggleBtn" title="Toggle light/dark mode">🌙</button>
 
                     <div class="user-badge" id="userBadge">
                         <img class="user-avatar" id="userAvatar" src="" alt="User avatar">
@@ -284,6 +287,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <!-- Apply saved theme immediately to prevent flash -->
+    <script>
+        if(localStorage.getItem('studyVaultTheme') === 'light') document.body.classList.add('light-theme');
+    </script>
     <!-- mammoth.js: .docx to HTML in the browser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="firebase-config.js"></script>

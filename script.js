@@ -49,7 +49,7 @@ const CLOUDINARY_CLOUD_NAME  = 'dkoqaqxub';
 const CLOUDINARY_UPLOAD_PRESET = 'studyvault_pdf';
 const auth      = firebase.auth();
 const firestore = firebase.firestore();
-const storage   = firebase.storage();
+// Note: Firebase Storage not used — PDFs are handled by Cloudinary
 
 // ── FOLDER STRUCTURE ─────────────────────────────────────────
 
@@ -536,12 +536,10 @@ const uploader = {
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                    formData.append('resource_type', 'raw');
                     this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);
                     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, { method:'POST', body:formData });
                     if(!res.ok) {
                         const errData = await res.json();
-                        console.error('Cloudinary error details:', JSON.stringify(errData));
                         throw new Error('Cloudinary upload failed: ' + (errData.error?.message || res.status));
                     }
                     const data = await res.json();
@@ -580,6 +578,26 @@ const uploader = {
 // ── INIT ──────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ── THEME TOGGLE ──────────────────────────────────────────
+    const themeBtn = document.getElementById('themeToggleBtn');
+    const loginThemeBtn = document.getElementById('loginThemeBtn');
+    const savedTheme = localStorage.getItem('studyVaultTheme') || 'dark';
+    const isLightOnLoad = savedTheme === 'light';
+    if(isLightOnLoad) {
+        document.body.classList.add('light-theme');
+        themeBtn.textContent = '☀️';
+        loginThemeBtn.textContent = '☀️';
+    }
+    function toggleTheme() {
+        const isLight = document.body.classList.toggle('light-theme');
+        const icon = isLight ? '☀️' : '🌙';
+        themeBtn.textContent = icon;
+        loginThemeBtn.textContent = icon;
+        localStorage.setItem('studyVaultTheme', isLight ? 'light' : 'dark');
+    }
+    themeBtn.addEventListener('click', toggleTheme);
+    loginThemeBtn.addEventListener('click', toggleTheme);
+
     uploader.init();
 
     document.getElementById('googleSignInBtn').addEventListener('click', ()=>{

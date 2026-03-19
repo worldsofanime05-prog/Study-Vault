@@ -536,17 +536,14 @@ const uploader = {
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                    formData.append('folder', `studyvault/${currentUser.uid}`);
-                    formData.append('access_mode', 'public');
-                    formData.append('type', 'upload');
+                    formData.append('resource_type', 'raw');
                     this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);
-                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method:'POST', body:formData });
+                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, { method:'POST', body:formData });
                     if(!res.ok) throw new Error('Cloudinary upload failed');
                     const data = await res.json();
-                    // Ensure URL ends with .pdf for browser to display correctly
-                    let pdfUrl = data.secure_url;
-                    if(!pdfUrl.toLowerCase().endsWith('.pdf')) pdfUrl += '.pdf';
-                    note.storageRef = pdfUrl;
+                    // Build correct public URL
+                    const publicUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${data.public_id}`;
+                    note.storageRef = publicUrl;
                     note.cloudinaryId = data.public_id;
                     advance();
                 } catch(err){ console.error('PDF upload error:',err); showToast(`Failed: "${file.name}"`,'error'); db.deleteNote(note.id,currentFolderId); advance(false); }

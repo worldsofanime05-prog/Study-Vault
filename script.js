@@ -1,4 +1,4 @@
-/* ============================================================
+ /* ============================================================
    STUDYVAULT  v3.0  —  Firebase Edition
    ============================================================
    SETUP INSTRUCTIONS
@@ -43,6 +43,10 @@
 
 // ── Firebase config is loaded from firebase-config.js (included before this file in index.html) ──
 firebase.initializeApp(firebaseConfig);
+
+// ── CLOUDINARY CONFIG (for PDF uploads) ──────────────────────
+const CLOUDINARY_CLOUD_NAME  = 'dkoqaqxub';
+const CLOUDINARY_UPLOAD_PRESET = 'studyvault_pdf';
 const auth      = firebase.auth();
 const firestore = firebase.firestore();
 const storage   = firebase.storage();
@@ -355,7 +359,7 @@ function attachGridListeners() {
             const note=db.findNoteById(btn.dataset.noteId); if(!note) return;
             if(!confirm(`Delete "${note.name}"?\nThis cannot be undone.`)) return;
             const deleted=db.deleteNote(note.id,currentFolderId);
-            if(deleted?.storageRef){ try{ await storage.ref(deleted.storageRef).delete(); }catch(_){} }
+            // Note: Cloudinary files remain in cloud (no delete API on free plan from browser)
             showToast(`"${note.name}" deleted`);
             selectedNotes.delete(note.id);
             saveAndRender(); updateBulkBar();
@@ -422,12 +426,14 @@ async function viewFile(note) {
         case 'pdf':
             showPanel('panelLoading');
             try {
-                const url=await storage.ref(note.storageRef).getDownloadURL();
-                document.getElementById('pdfFrame').src=url;
+                // storageRef now holds the full Cloudinary URL
+                const url = note.storageRef;
+                if(!url) throw new Error('No URL');
+                document.getElementById('pdfFrame').src = url;
                 showPanel('panelPdf');
             } catch(err) {
                 console.error('PDF load error:',err);
-                document.getElementById('unsupportedMsg').textContent='Could not load PDF from storage.';
+                document.getElementById('unsupportedMsg').textContent='Could not load PDF.';
                 showPanel('panelUnsupported');
             }
             break;
@@ -441,8 +447,8 @@ async function downloadFile(note) {
     if(!note){ showToast('File not found','error'); return; }
     try {
         if(note.storageRef) {
-            const url=await storage.ref(note.storageRef).getDownloadURL();
-            const a=Object.assign(document.createElement('a'),{href:url,download:note.name,target:'_blank'});
+            // storageRef is now a full Cloudinary URL
+            const a=Object.assign(document.createElement('a'),{href:note.storageRef,download:note.name,target:'_blank'});
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         } else if(note.content) {
             const blob=new Blob([note.content],{type:note.mimeType||'text/plain'});
@@ -524,11 +530,17 @@ const uploader = {
             if(kind==='pdf') {
                 const note=db.addNote(currentFolderId,file.name,size,'pdf','application/pdf');
                 if(!note){ advance(false); continue; }
-                note.storageRef=`users/${currentUser.uid}/${note.id}`;
-                const ref=storage.ref(note.storageRef);
                 try {
-                    const task=ref.put(file);
-                    await new Promise((res,rej)=>{ task.on('state_changed', snap=>{ const p=Math.round(snap.bytesTransferred/snap.totalBytes*100); this.setProgress(Math.round(done/total*100)+Math.round(p/total),`Uploading ${file.name}… ${p}%`); }, rej, res); });
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                    formData.append('folder', `studyvault/${currentUser.uid}`);
+                    this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);
+                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, { method:'POST', body:formData });
+                    if(!res.ok) throw new Error('Cloudinary upload failed');
+                    const data = await res.json();
+                    note.storageRef = data.secure_url;
+                    note.cloudinaryId = data.public_id;
                     advance();
                 } catch(err){ console.error('PDF upload error:',err); showToast(`Failed: "${file.name}"`,'error'); db.deleteNote(note.id,currentFolderId); advance(false); }
                 continue;
@@ -605,8 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('clearDataBtn').addEventListener('click', async ()=>{
         if(!confirm('⚠ Delete ALL folders and files permanently?\nThis cannot be undone.')) return;
-        const delRefs=(node)=>{ node.notes.forEach(async n=>{ if(n.storageRef){ try{ await storage.ref(n.storageRef).delete(); }catch(_){} } }); node.subFolders.forEach(delRefs); };
-        delRefs(db.root); db.clearAll(); showToast('All data cleared','info'); saveAndRender();
+        db.clearAll(); showToast('All data cleared','info'); saveAndRender();
     });
 
     document.getElementById('selectModeBtn').addEventListener('click',   ()=>selectMode?exitSelectMode():enterSelectMode());
@@ -616,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('bulkDeleteBtn').addEventListener('click', async ()=>{
         const count=selectedNotes.size;
         if(!count||!confirm(`Delete ${count} file${count!==1?'s':''}?\nThis cannot be undone.`)) return;
-        for(const id of selectedNotes){ const d=db.deleteNote(id,currentFolderId); if(d?.storageRef){ try{ await storage.ref(d.storageRef).delete(); }catch(_){} } }
+        for(const id of selectedNotes){ db.deleteNote(id,currentFolderId); }
         showToast(`${count} file${count!==1?'s':''} deleted`); exitSelectMode(); saveAndRender();
     });
 

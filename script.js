@@ -537,8 +537,10 @@ const uploader = {
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                     formData.append('folder', `studyvault/${currentUser.uid}`);
+                    formData.append('access_mode', 'public');
+                    formData.append('type', 'upload');
                     this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);
-                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, { method:'POST', body:formData });
+                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method:'POST', body:formData });
                     if(!res.ok) throw new Error('Cloudinary upload failed');
                     const data = await res.json();
                     // Ensure URL ends with .pdf for browser to display correctly

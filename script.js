@@ -426,11 +426,13 @@ async function viewFile(note) {
         case 'pdf':
             showPanel('panelLoading');
             try {
-                // storageRef now holds the full Cloudinary URL
                 const url = note.storageRef;
                 if(!url) throw new Error('No URL');
-                document.getElementById('pdfFrame').src = url;
-                showPanel('panelPdf');
+                // Open PDF in new tab for best compatibility
+                window.open(url, '_blank');
+                modal.close('viewFileModal');
+                showToast('PDF opened in new tab', 'info');
+                showPanel('panelUnsupported');
             } catch(err) {
                 console.error('PDF load error:',err);
                 document.getElementById('unsupportedMsg').textContent='Could not load PDF.';
@@ -539,7 +541,10 @@ const uploader = {
                     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, { method:'POST', body:formData });
                     if(!res.ok) throw new Error('Cloudinary upload failed');
                     const data = await res.json();
-                    note.storageRef = data.secure_url;
+                    // Ensure URL ends with .pdf for browser to display correctly
+                    let pdfUrl = data.secure_url;
+                    if(!pdfUrl.toLowerCase().endsWith('.pdf')) pdfUrl += '.pdf';
+                    note.storageRef = pdfUrl;
                     note.cloudinaryId = data.public_id;
                     advance();
                 } catch(err){ console.error('PDF upload error:',err); showToast(`Failed: "${file.name}"`,'error'); db.deleteNote(note.id,currentFolderId); advance(false); }

@@ -61,11 +61,18 @@ class FolderStructure {
     _uid() { return `n_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; }
 
     // Cache
+    _cacheKey() {
+        // Separate storage per Google user + separate guest storage
+        if(typeof currentUser !== 'undefined' && currentUser && currentUser.uid) {
+            return 'sv_cache_' + currentUser.uid;
+        }
+        return 'sv_cache_guest';
+    }
     _saveCache() {
-        try { localStorage.setItem('studyVaultCache', JSON.stringify(this.root)); } catch(_) {}
+        try { localStorage.setItem(this._cacheKey(), JSON.stringify(this.root)); } catch(_) {}
     }
     _loadCache() {
-        try { const r = localStorage.getItem('studyVaultCache'); if(r){ this.root=JSON.parse(r); return true; } } catch(_) {}
+        try { const r = localStorage.getItem(this._cacheKey()); if(r){ this.root=JSON.parse(r); return true; } } catch(_) {}
         return false;
     }
 

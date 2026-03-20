@@ -171,7 +171,7 @@ function setSyncState(state) {
     const dot=document.getElementById('syncDot'), lbl=document.getElementById('syncLabel');
     if(!dot||!lbl) return;
     dot.className = `sync-dot sync-dot--${state}`;
-    if(!currentUser) { lbl.textContent='Local only'; return; }
+    if(!currentUser) { dot.className='sync-dot sync-dot--saved'; lbl.textContent='Local only'; return; }
     lbl.textContent = state==='saving'?'Saving…':state==='error'?'Sync error':'Synced';
 }
 
@@ -606,18 +606,29 @@ const uploader = {
 // ── INIT ──────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // ── THEME TOGGLE ──────────────────────────────────────────
+    // ── THEME + FONT TOGGLE ───────────────────────────────────
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('sv_theme', next);
+    }
     const themeBtn = document.getElementById('themeToggleBtn');
     const loginThemeBtn = document.getElementById('loginThemeBtn');
-    const savedTheme = localStorage.getItem('studyVaultTheme') || 'dark';
-    const isLightOnLoad = savedTheme === 'light';
-    if(isLightOnLoad) document.body.classList.add('light-theme');
-    function toggleTheme() {
-        const isLight = document.body.classList.toggle('light-theme');
-        localStorage.setItem('studyVaultTheme', isLight ? 'light' : 'dark');
-    }
     if(themeBtn) themeBtn.addEventListener('click', toggleTheme);
     if(loginThemeBtn) loginThemeBtn.addEventListener('click', toggleTheme);
+
+    // ── FONT PICKER ────────────────────────────────────────────
+    document.querySelectorAll('.font-opt').forEach(btn => {
+        const font = btn.dataset.font;
+        if(document.documentElement.getAttribute('data-font') === font) btn.classList.add('active');
+        btn.addEventListener('click', () => {
+            document.documentElement.setAttribute('data-font', font);
+            localStorage.setItem('sv_font', font);
+            document.querySelectorAll('.font-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
 
     uploader.init();
 

@@ -1152,3 +1152,79 @@ h1,h2,h3 { font-family: var(--f-serif); }
 
 .folder-pin-btn--active     { background: var(--gold-soft) !important; color: var(--gold) !important; }
 .folder-archive-btn--active { background: var(--surface-hi) !important; color: var(--ink-2) !important; }
+
+/* ════════════════════════════════════════════════════════
+   MOBILE — Viewer + Top bar fixes
+════════════════════════════════════════════════════════ */
+@media(max-width: 768px) {
+
+  /* ── Viewer modal header on mobile ── */
+  .viewer-hdr {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 1rem !important;
+  }
+  .vhdr-left {
+    width: 100%;
+    min-width: 0;
+    order: 1;
+  }
+  .vhdr-right {
+    order: 2;
+    margin-left: auto;
+  }
+  .fv-title {
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100vw - 160px);
+  }
+  .fv-badge { font-size: 0.55rem; }
+
+  /* ── Top bar — hide sync, compress everything ── */
+  #syncIndicator { display: none !important; }
+  .top-bar-right { gap: 0.25rem; }
+
+  /* Show current folder name in header as subtitle on mobile */
+  .content-header { margin-bottom: 1rem; }
+  .content-title { font-size: 1.4rem; line-height: 1.2; }
+
+  /* Download button in viewer — icon only on mobile */
+  #downloadFileBtn .dl-text { display: none; }
+  #downloadFileBtn { padding: 0.4rem 0.6rem !important; }
+
+  /* Viewer body takes full height */
+  .modal-card--viewer .modal-ftr { padding: 0.75rem 1rem; }
+  .modal-card--viewer .modal-hdr { padding: 0.875rem 1rem; }
+
+  /* Note card actions always visible on mobile (no hover) */
+  .note-card-actions {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Folder actions always visible on mobile */
+  .folder-actions {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Bulk bar scrollable on mobile */
+  .bulk-bar { overflow-x: auto; flex-wrap: nowrap; }
+}
+
+/* ── Mobile back button + folder name in top bar ── */
+.mobile-back-btn {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  color: var(--ink); cursor: pointer; flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.mobile-back-btn:hover { background: var(--gold-soft); color: var(--gold); }
+.mobile-folder-name {
+  font-family: var(--f-serif); font-size: 1rem; font-weight: 700;
+  color: var(--ink); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 140px;
+}

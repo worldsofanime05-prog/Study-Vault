@@ -171,11 +171,13 @@ function setSyncState(state) {
     const dot=document.getElementById('syncDot'), lbl=document.getElementById('syncLabel');
     if(!dot||!lbl) return;
     dot.className = `sync-dot sync-dot--${state}`;
+    if(!currentUser) { lbl.textContent='Local only'; return; }
     lbl.textContent = state==='saving'?'Saving…':state==='error'?'Sync error':'Synced';
 }
 
 async function saveAndRender() {
     if(currentUser) await db.saveToCloud(currentUser.uid);
+    else db._saveCache(); // guest: local only
     renderAll();
 }
 
@@ -207,8 +209,17 @@ function showApp()     { document.getElementById('appLoading').style.display='no
 function showLogin()   { document.getElementById('appLoading').style.display='none'; document.getElementById('loginScreen').style.display=''; document.getElementById('appContainer').style.display='none'; }
 
 function setUserBadge(user) {
-    document.getElementById('userAvatar').src = user.photoURL||'';
-    document.getElementById('userName').textContent = user.displayName?.split(' ')[0]||user.email;
+    if(user) {
+        document.getElementById('userAvatar').src = user.photoURL||'';
+        document.getElementById('userName').textContent = user.displayName?.split(' ')[0]||user.email;
+        document.getElementById('userBadge').style.display = '';
+        document.getElementById('signOutBtn').style.display = '';
+    } else {
+        document.getElementById('userAvatar').src = '';
+        document.getElementById('userName').textContent = 'Guest';
+        document.getElementById('userBadge').style.display = '';
+        document.getElementById('signOutBtn').style.display = '';
+    }
 }
 
 auth.onAuthStateChanged(async user => {
@@ -223,8 +234,18 @@ auth.onAuthStateChanged(async user => {
         setSyncState('saved');
         renderAll();
     } else {
-        currentUser = null;
-        showLogin();
+        // Check if user chose guest mode
+        if(localStorage.getItem('studyVaultGuest') === 'true') {
+            currentUser = null;
+            setUserBadge(null);
+            db._loadCache();
+            showApp();
+            setSyncState('saved');
+            renderAll();
+        } else {
+            currentUser = null;
+            showLogin();
+        }
     }
 });
 
@@ -604,7 +625,24 @@ document.addEventListener('DOMContentLoaded', () => {
         auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
             .catch(err=>{ console.error('Sign-in error:',err); showToast('Sign-in failed — please try again','error'); });
     });
-    document.getElementById('signOutBtn').addEventListener('click', ()=>auth.signOut());
+
+    document.getElementById('guestSignInBtn').addEventListener('click', ()=>{
+        localStorage.setItem('studyVaultGuest', 'true');
+        currentUser = null;
+        setUserBadge(null);
+        db._loadCache();
+        showApp();
+        setSyncState('saved');
+        document.getElementById('syncLabel').textContent = 'Local only';
+        renderAll();
+        showToast('Using local mode — data stays on this device', 'info');
+    });
+
+    document.getElementById('signOutBtn').addEventListener('click', ()=>{
+        localStorage.removeItem('studyVaultGuest');
+        if(currentUser) auth.signOut();
+        else showLogin();
+    });
 
     document.getElementById('createFolderBtn').addEventListener('click', ()=>{
         document.getElementById('folderNameInput').value=''; modal.ctx.parentFolderId=currentFolderId;

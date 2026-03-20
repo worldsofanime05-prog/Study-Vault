@@ -1044,31 +1044,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if(loginThemeBtn) loginThemeBtn.addEventListener('click', toggleTheme);
 
     // ── FONT PICKER ────────────────────────────────────────────
-    const curFont = localStorage.getItem('sv_font') || 'jakarta';
-    document.querySelectorAll('.fp-opt').forEach(btn => {
-        if(btn.dataset.font === curFont) btn.classList.add('fp-active');
+    // fp-opt handled by fp-modal-opt above
+    // ── FONT PICKER MODAL ─────────────────────────────────────
+    const fontPickerBtn = document.getElementById('fontPickerBtn');
+    const fontPickerModal = document.getElementById('fontPickerModal');
+    const fontPickerClose = document.getElementById('fontPickerClose');
+
+    function openFontPicker() {
+        fontPickerModal.style.display = 'flex';
+        // Mark active font
+        const curFont = localStorage.getItem('sv_font') || 'jakarta';
+        document.querySelectorAll('.fp-modal-opt').forEach(b => {
+            b.classList.toggle('fp-modal-active', b.dataset.font === curFont);
+        });
+    }
+    function closeFontPicker() { fontPickerModal.style.display = 'none'; }
+
+    if(fontPickerBtn) fontPickerBtn.addEventListener('click', openFontPicker);
+    if(fontPickerClose) fontPickerClose.addEventListener('click', closeFontPicker);
+    if(fontPickerModal) fontPickerModal.addEventListener('click', (e) => {
+        if(e.target === fontPickerModal) closeFontPicker();
+    });
+    document.querySelectorAll('.fp-modal-opt').forEach(btn => {
         btn.addEventListener('click', () => {
             const font = btn.dataset.font;
             document.documentElement.setAttribute('data-font', font);
             localStorage.setItem('sv_font', font);
-            document.querySelectorAll('.fp-opt').forEach(b => b.classList.remove('fp-active'));
-            btn.classList.add('fp-active');
-            // Close picker on mobile after selection
-            document.querySelector('.font-picker')?.classList.remove('fp-open');
+            document.querySelectorAll('.fp-modal-opt').forEach(b => b.classList.remove('fp-modal-active'));
+            btn.classList.add('fp-modal-active');
+            closeFontPicker();
         });
     });
-    // Mobile: tap to toggle font picker
-    const fpTrigger = document.querySelector('.fp-trigger');
-    if(fpTrigger) {
-        fpTrigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const picker = document.querySelector('.font-picker');
-            picker?.classList.toggle('fp-open');
-        });
-        document.addEventListener('click', () => {
-            document.querySelector('.font-picker')?.classList.remove('fp-open');
-        });
-    }
 
     uploader.init();
 

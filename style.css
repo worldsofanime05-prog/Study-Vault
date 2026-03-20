@@ -910,7 +910,7 @@ h1,h2,h3 { font-family: var(--f-serif); }
   /* Hide original desktop user-menu on mobile (replaced by sheet) */
   .user-menu { display: none !important; }
 
-  /* ── Font picker — solid background, tap to open ── */
+  /* ── Font picker — fixed overlay, tap only ── */
   .fp-menu {
     position: fixed !important;
     bottom: 5.5rem !important;
@@ -921,15 +921,26 @@ h1,h2,h3 { font-family: var(--f-serif); }
     background: var(--paper) !important;
     border: 1px solid var(--ink-4) !important;
     border-radius: var(--radius-xl) !important;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.25) !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4) !important;
     padding: 1rem !important;
     z-index: 9000 !important;
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(8px);
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transform: translateY(8px) !important;
     transition: all 0.2s ease;
-    pointer-events: none;
+    pointer-events: none !important;
   }
+  /* Disable ALL desktop hover/focus triggers on mobile */
+  .font-picker:focus-within .fp-menu,
+  .fp-trigger:hover ~ .fp-menu,
+  .fp-trigger:focus + .fp-menu,
+  .fp-menu:hover {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: translateY(8px) !important;
+  }
+  /* ONLY show when js adds fp-open class */
   .font-picker.fp-open .fp-menu {
     opacity: 1 !important;
     visibility: visible !important;

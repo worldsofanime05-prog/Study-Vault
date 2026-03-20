@@ -1023,3 +1023,24 @@ h1,h2,h3 { font-family: var(--f-serif); }
   background: none;
 }
 .sv-file-delete:hover { background: rgba(220,38,38,0.10); color: var(--red); }
+
+
+/* ── FOLDER CARD — PIN / ARCHIVE ────────────────────────── */
+.folder-card-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  width: 100%; margin-bottom: 0.25rem;
+}
+.folder-card-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.folder-status-badge {
+  font-size: 0.58rem; font-weight: 700; padding: 2px 6px;
+  border-radius: 4px; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.folder-status-badge--pin     { background: var(--gold-soft);              color: var(--gold); }
+.folder-status-badge--archive { background: rgba(107,114,128,0.12); color: var(--ink-3); }
+
+/* 4-button action row needs more space */
+.folder-actions { gap: 4px; flex-wrap: wrap; }
+.folder-btn { flex: unset; padding: 0.3rem 0.5rem; font-size: 0.65rem; }
+
+.folder-pin-btn--active     { background: var(--gold-soft) !important; color: var(--gold) !important; }
+.folder-archive-btn--active { background: var(--surface-hi) !important; color: var(--ink-2) !important; }

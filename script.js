@@ -1109,27 +1109,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // More sheet
     const moreBtn = document.getElementById('mobileMoreBtn');
     const moreSheet = document.getElementById('mobileMoreSheet');
+    function openMoreSheet()  { moreSheet.style.display = 'flex'; }
+    function closeMoreSheet() { moreSheet.style.display = 'none'; }
     if(moreBtn && moreSheet) {
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            moreSheet.style.display = moreSheet.style.display === 'flex' ? 'none' : 'flex';
+            e.preventDefault();
+            const isOpen = moreSheet.style.display === 'flex';
+            if(isOpen) closeMoreSheet(); else openMoreSheet();
         });
+        // Close when tapping dark overlay background
         moreSheet.addEventListener('click', (e) => {
-            if(e.target === moreSheet) moreSheet.style.display = 'none';
+            if(e.target === moreSheet) closeMoreSheet();
         });
         moreSheet.querySelectorAll('.more-sheet-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
                 const view = item.dataset.view;
-                moreSheet.style.display = 'none';
+                closeMoreSheet();
                 setView(view);
-                // highlight More button when archive/storage active
-                document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('bn-active'));
-                moreBtn.classList.add('bn-active');
             });
         });
+        // Close on outside click — but use setTimeout so it doesn't fire on same tap
         document.addEventListener('click', (e) => {
-            if(!moreBtn.contains(e.target) && !moreSheet.contains(e.target)) {
-                moreSheet.style.display = 'none';
+            if(moreSheet.style.display === 'flex' &&
+               !moreBtn.contains(e.target) &&
+               !moreSheet.querySelector('.more-sheet').contains(e.target)) {
+                closeMoreSheet();
             }
         });
     }

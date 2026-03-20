@@ -286,6 +286,9 @@ function setUserBadge(user) {
     // Update sidebar identity
     const sbName = document.getElementById('userName');
     if(sbName) sbName.textContent = user ? (user.displayName||user.email) : 'The Archivist';
+    // Set username on dropdown for mobile ::before label
+    const userMenu = document.querySelector('.user-menu');
+    if(userMenu) userMenu.setAttribute('data-username', displayName);
     if(user) {
         avatar.src = user.photoURL||'';
         avatar.style.display = 'block';

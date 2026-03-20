@@ -554,6 +554,7 @@ const uploader = {
                 if(!note){ advance(false); continue; }
                 try {
                     const userFolder = currentUser ? currentUser.uid : 'guest';
+                    const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                     this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);

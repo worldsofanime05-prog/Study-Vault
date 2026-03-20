@@ -805,9 +805,19 @@ function setView(view) {
         const v = a.dataset.view || 'library';
         if(v === view) a.classList.add('sb-nav-item--active');
     });
+    // Update bottom nav active state (mobile)
+    document.querySelectorAll('.bn-item').forEach(btn => {
+        btn.classList.toggle('bn-active', btn.dataset.view === view);
+    });
     // Show/hide toolbar actions (only relevant in library)
     const toolbarActions = document.querySelector('.content-toolbar');
     if(toolbarActions) toolbarActions.style.display = (view==='library') ? '' : 'none';
+    // Update page title for mobile
+    const title = document.querySelector('.content-title');
+    if(title) {
+        const titles = {library:'Academic Collection', recent:'Recent', pinned:'Pinned', archive:'Archive', storage:'Storage'};
+        title.textContent = titles[view] || 'Academic Collection';
+    }
     exitSelectMode();
     renderAll();
 }
@@ -1040,6 +1050,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Sidebar storage manage button
     const sbManageBtn = document.querySelector('.sb-storage-manage');
     if(sbManageBtn) sbManageBtn.addEventListener('click', () => setView('storage'));
+
+    // ── BOTTOM NAV (mobile) ────────────────────────────────
+    document.querySelectorAll('.bn-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.dataset.view || 'library';
+            if(view === 'library') currentFolderId = 'root';
+            setView(view);
+        });
+    });
+    const mobileFab = document.getElementById('mobileFabBtn');
+    if(mobileFab) mobileFab.addEventListener('click', () => {
+        document.getElementById('folderNameInput').value = '';
+        modal.ctx.parentFolderId = currentFolderId;
+        modal.open('createFolderModal');
+        setTimeout(() => document.getElementById('folderNameInput').focus(), 80);
+    });
 
     document.getElementById('googleSignInBtn').addEventListener('click', ()=>{
         auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())

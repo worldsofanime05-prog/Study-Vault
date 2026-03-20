@@ -178,6 +178,16 @@ class FolderStructure {
         node.subFolders.forEach(s => this.getAllNotes(s, arr));
         return arr;
     }
+    getAllFolders(node=this.root, arr=[], parentId=null) {
+        node.subFolders.forEach(f => {
+            f._parentId = parentId || node.id;
+            arr.push(f);
+            this.getAllFolders(f, arr, f.id);
+        });
+        return arr;
+    }
+    getPinnedFolders()  { return this.getAllFolders().filter(f => f.pinned && !f.archived); }
+    getArchivedFolders(){ return this.getAllFolders().filter(f => f.archived); }
     getRecentNotes(limit=10) {
         return this.getAllNotes()
             .filter(n => n.lastAccessed && !n.archived)
@@ -365,6 +375,45 @@ function getFileMeta(note){ return FILE_KIND_META[note.fileKind]||FILE_KIND_META
 
 // ── FOLDER GRID ───────────────────────────────────────────────
 
+function buildFolderCardHtml(folder, showLocation=false) {
+    const info = `${folder.subFolders.length} folder${folder.subFolders.length!==1?'s':''} · ${folder.notes.length} file${folder.notes.length!==1?'s':''}`;
+    const pinnedCls  = folder.pinned   ? 'folder-pin-btn--active'    : '';
+    const archivedCls= folder.archived ? 'folder-archive-btn--active' : '';
+    const pinnedTitle   = folder.pinned   ? 'Unpin'      : 'Pin folder';
+    const archiveTitle  = folder.archived ? 'Unarchive'  : 'Archive folder';
+    const locationBadge = showLocation && folder._parentId
+        ? `<span class="note-location">${esc(db.findById(folder._parentId)?.name || 'Root')}</span>` : '';
+    return `<div class="folder-card" data-folder-id="${folder.id}" role="button" tabindex="0">
+        <div class="folder-card-top">
+            <div class="folder-icon-wrap"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+            <div class="folder-card-badges">
+                ${folder.pinned   ? '<span class="folder-status-badge folder-status-badge--pin">Pinned</span>'    : ''}
+                ${folder.archived ? '<span class="folder-status-badge folder-status-badge--archive">Archived</span>' : ''}
+            </div>
+        </div>
+        <div class="folder-name">${esc(folder.name)}${locationBadge}</div>
+        <div class="folder-meta">${info}</div>
+        <div class="folder-actions">
+            <button class="folder-btn rename-btn" data-folder-id="${folder.id}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Rename
+            </button>
+            <button class="folder-btn folder-pin-btn ${pinnedCls}" data-folder-id="${folder.id}" title="${pinnedTitle}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="${folder.pinned?'currentColor':'none'}" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                ${folder.pinned ? 'Unpin' : 'Pin'}
+            </button>
+            <button class="folder-btn folder-archive-btn ${archivedCls}" data-folder-id="${folder.id}" title="${archiveTitle}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                ${folder.archived ? 'Restore' : 'Archive'}
+            </button>
+            <button class="folder-btn delete delete-btn" data-folder-id="${folder.id}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                Delete
+            </button>
+        </div>
+    </div>`;
+}
+
 function buildNoteCardHtml(note, showLocation=false) {
     const meta=getFileMeta(note), canView=note.content||note.storageRef;
     const clickCls=selectMode?'note-card-selectable':(canView?'note-card-clickable':'');
@@ -399,17 +448,19 @@ function renderFolderGrid() {
         attachGridListeners(); return;
     }
     if(currentView==='pinned') {
-        const notes=db.getPinnedNotes();
-        updateViewHeader('Pinned Files','Your bookmarked files');
-        if(!notes.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><p class="empty-title">No pinned files</p><p class="empty-sub">Pin a file using the bookmark icon on any note card.</p></div>`; return; }
-        grid.innerHTML = notes.map(n=>buildNoteCardHtml(n,true)).join('');
+        const notes   = db.getPinnedNotes();
+        const folders = db.getPinnedFolders();
+        updateViewHeader('Pinned','Your bookmarked items');
+        if(!notes.length && !folders.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><p class="empty-title">No pinned items</p><p class="empty-sub">Pin folders or files using the bookmark icon.</p></div>`; return; }
+        grid.innerHTML = folders.map(f=>buildFolderCardHtml(f,true)).join('') + notes.map(n=>buildNoteCardHtml(n,true)).join('');
         attachGridListeners(); return;
     }
     if(currentView==='archive') {
-        const notes=db.getArchivedNotes();
-        updateViewHeader('Archive','Files hidden from your main library');
-        if(!notes.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div><p class="empty-title">Archive is empty</p><p class="empty-sub">Archive notes to hide them from the main library.</p></div>`; return; }
-        grid.innerHTML = notes.map(n=>buildNoteCardHtml(n,true)).join('');
+        const notes   = db.getArchivedNotes();
+        const folders = db.getArchivedFolders();
+        updateViewHeader('Archive','Items hidden from your main library');
+        if(!notes.length && !folders.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div><p class="empty-title">Archive is empty</p><p class="empty-sub">Archive folders or files to hide them from the main library.</p></div>`; return; }
+        grid.innerHTML = folders.map(f=>buildFolderCardHtml(f,true)).join('') + notes.map(n=>buildNoteCardHtml(n,true)).join('');
         attachGridListeners(); return;
     }
 
@@ -452,6 +503,29 @@ function attachGridListeners() {
     document.querySelectorAll('.folder-card').forEach(card => {
         card.addEventListener('click', e => { if(e.target.closest('.folder-actions')) return; currentFolderId=card.dataset.folderId; renderAll(); });
         card.addEventListener('keydown', e => { if((e.key==='Enter'||e.key===' ')&&!e.target.closest('.folder-actions')){ e.preventDefault(); currentFolderId=card.dataset.folderId; renderAll(); } });
+    });
+
+    // ── FOLDER PIN ────────────────────────────────────────
+    document.querySelectorAll('.folder-pin-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const folder = db.findById(btn.dataset.folderId); if(!folder) return;
+            folder.pinned = !folder.pinned;
+            showToast(folder.pinned ? `"${folder.name}" pinned` : `"${folder.name}" unpinned`, 'info');
+            saveAndRender();
+        });
+    });
+
+    // ── FOLDER ARCHIVE ────────────────────────────────────
+    document.querySelectorAll('.folder-archive-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const folder = db.findById(btn.dataset.folderId); if(!folder) return;
+            folder.archived = !folder.archived;
+            if(folder.archived && folder.pinned) folder.pinned = false;
+            showToast(folder.archived ? `"${folder.name}" archived` : `"${folder.name}" restored`, 'info');
+            saveAndRender();
+        });
     });
 
     document.querySelectorAll('.rename-btn').forEach(btn => {

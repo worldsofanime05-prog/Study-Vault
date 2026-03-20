@@ -826,10 +826,10 @@ h1,h2,h3 { font-family: var(--f-serif); }
   /* Hide breadcrumb text on small screens — just show logo */
   .top-breadcrumb { display: none; }
 
-  /* Compress user badge — just avatar + name, hide actions inline */
-  .ub-actions { display: none; }
-  .user-badge { padding: 3px 8px 3px 3px; gap: 6px; }
-  .ub-name { font-size: 0.75rem; }
+  /* Mobile: hide name + actions — avatar only */
+  .ub-info { display: none !important; }
+  .ub-actions { display: none !important; }
+  .user-badge { padding: 0 !important; gap: 0 !important; border-radius: 50% !important; }
 
   /* Hide font picker label text on mobile */
   .fp-menu { right: -4rem; }
@@ -1212,6 +1212,9 @@ h1,h2,h3 { font-family: var(--f-serif); }
 
   /* Bulk bar scrollable on mobile */
   .bulk-bar { overflow-x: auto; flex-wrap: nowrap; }
+
+  /* Hide "Click to view" hint — redundant on mobile */
+  .note-hint, .note-hint--pdf, .note-hint--docx, .note-hint--muted { display: none !important; }
 }
 
 /* ── Mobile back button + folder name in top bar ── */

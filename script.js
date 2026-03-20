@@ -288,7 +288,7 @@ function setUserBadge(user) {
     if(sbName) sbName.textContent = user ? (user.displayName||user.email) : 'The Archivist';
     if(user) {
         avatar.src = user.photoURL||'';
-        avatar.style.display = '';
+        avatar.style.display = 'block';
         guestAv.style.display = 'none';
     } else {
         avatar.style.display = 'none';

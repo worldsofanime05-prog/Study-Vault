@@ -311,12 +311,15 @@ h1,h2,h3 { font-family: var(--f-serif); }
 /* ── TOP BAR ────────────────────────────────────────────── */
 .top-bar {
   position: sticky; top: 0; z-index: 100;
+  width: 100%;
+  left: 0; right: 0;
   background: rgba(250,249,245,0.85);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--ink-4);
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.75rem 2rem; gap: 1rem;
   transition: background 0.25s ease;
+  box-sizing: border-box;
 }
 [data-theme="dark"] .top-bar { background: rgba(13,14,22,0.88); }
 
@@ -514,6 +517,7 @@ h1,h2,h3 { font-family: var(--f-serif); }
   padding: 1.25rem; display: flex; align-items: flex-start; gap: 1rem;
   position: relative; transition: background 0.15s ease;
   box-shadow: var(--shadow-float); cursor: default;
+  overflow: hidden; min-width: 0;
 }
 [data-theme="light"] .note-card { background: #ffffff; }
 [data-theme="dark"]  .note-card { background: var(--surface-hi); }
@@ -561,7 +565,7 @@ h1,h2,h3 { font-family: var(--f-serif); }
 .note-icon-binary { background: rgba(124,58,237,0.08); color: var(--bin); }
 
 .note-info { flex: 1; min-width: 0; }
-.note-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; min-width: 0; }
+.note-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; min-width: 0; overflow: hidden; }
 .note-badge {
   font-size: 0.58rem; font-weight: 700; padding: 2px 7px; border-radius: 4px;
   text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0;
@@ -958,7 +962,14 @@ h1,h2,h3 { font-family: var(--f-serif); }
 .note-location {
   font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em;
   background: var(--chip-bg); color: var(--chip-fg);
-  padding: 1px 6px; border-radius: 4px; flex-shrink: 0;
+  padding: 1px 6px; border-radius: 4px;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
 }
 
 /* ═══════════════════════════════════════════════════════════

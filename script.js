@@ -542,7 +542,6 @@ const uploader = {
 
     async upload() {
         if(!this.files.length){ showToast('No files selected','error'); return; }
-        if(!currentUser){ showToast('Not signed in','error'); return; }
         const total=this.files.length; let done=0, errs=0;
         const advance=(ok=true)=>{ if(!ok) errs++; done++; this.setProgress(Math.round(done/total*100),`Uploading ${done} of ${total}…`); if(done<total) return; this.setProgress(100,''); const msg=errs?`${total-errs} uploaded, ${errs} failed`:`${total} file${total!==1?'s':''} uploaded`; showToast(msg,errs?'info':'success'); this.files=[]; this.renderList(); saveAndRender(); modal.close('uploadNotesModal'); };
         this.setProgress(1,`Uploading 0 of ${total}…`);
@@ -554,7 +553,7 @@ const uploader = {
                 const note=db.addNote(currentFolderId,file.name,size,'pdf','application/pdf');
                 if(!note){ advance(false); continue; }
                 try {
-                    const formData = new FormData();
+                    const userFolder = currentUser ? currentUser.uid : 'guest';
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                     this.setProgress(Math.round(done/total*100)+Math.round(1/total*100),`Uploading ${file.name}…`);

@@ -827,7 +827,13 @@ function setView(view) {
     });
     // Update bottom nav active state (mobile)
     document.querySelectorAll('.bn-item').forEach(btn => {
-        btn.classList.toggle('bn-active', btn.dataset.view === view);
+        const btnView = btn.dataset.view;
+        const isMoreBtn = btn.id === 'mobileMoreBtn';
+        if(isMoreBtn) {
+            btn.classList.toggle('bn-active', view === 'archive' || view === 'storage');
+        } else {
+            btn.classList.toggle('bn-active', btnView === view);
+        }
     });
     // Show/hide toolbar actions (only relevant in library)
     const toolbarActions = document.querySelector('.content-toolbar');
@@ -1092,13 +1098,41 @@ document.addEventListener('DOMContentLoaded', () => {
     if(sbManageBtn) sbManageBtn.addEventListener('click', () => setView('storage'));
 
     // ── BOTTOM NAV (mobile) ────────────────────────────────
-    document.querySelectorAll('.bn-item').forEach(btn => {
+    document.querySelectorAll('.bn-item[data-view]').forEach(btn => {
         btn.addEventListener('click', () => {
-            const view = btn.dataset.view || 'library';
+            const view = btn.dataset.view;
             if(view === 'library') currentFolderId = 'root';
             setView(view);
         });
     });
+
+    // More sheet
+    const moreBtn = document.getElementById('mobileMoreBtn');
+    const moreSheet = document.getElementById('mobileMoreSheet');
+    if(moreBtn && moreSheet) {
+        moreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            moreSheet.style.display = moreSheet.style.display === 'flex' ? 'none' : 'flex';
+        });
+        moreSheet.addEventListener('click', (e) => {
+            if(e.target === moreSheet) moreSheet.style.display = 'none';
+        });
+        moreSheet.querySelectorAll('.more-sheet-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const view = item.dataset.view;
+                moreSheet.style.display = 'none';
+                setView(view);
+                // highlight More button when archive/storage active
+                document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('bn-active'));
+                moreBtn.classList.add('bn-active');
+            });
+        });
+        document.addEventListener('click', (e) => {
+            if(!moreBtn.contains(e.target) && !moreSheet.contains(e.target)) {
+                moreSheet.style.display = 'none';
+            }
+        });
+    }
     const mobileFab = document.getElementById('mobileFabBtn');
     if(mobileFab) mobileFab.addEventListener('click', () => {
         document.getElementById('folderNameInput').value = '';

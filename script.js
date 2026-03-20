@@ -414,7 +414,7 @@ function renderFolderGrid() {
     }
 
     if(currentView==='storage') {
-        updateViewHeader('Storage','Your vault's storage breakdown');
+        updateViewHeader('Storage','Your vault storage breakdown');
         renderStorageView();
         return;
     }

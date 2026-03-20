@@ -123,12 +123,40 @@ class FolderStructure {
         const p = this.findById(parentId); if(!p) return false;
         p.subFolders = p.subFolders.filter(f => f.id !== id); return true;
     }
-    addNote(folderId, name, size, fileKind='binary', mimeType=null) {
+    addNote(folderId, name, size, fileKind='binary', mimeType=null, sizeBytes=0) {
         const folder = this.findById(folderId); if(!folder) return null;
-        const note = { id:this._uid(), name, size, fileKind, mimeType,
+        const note = { id:this._uid(), name, size, sizeBytes, fileKind, mimeType,
             content:null, storageRef:null,
             addedDate: new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) };
         folder.notes.push(note); return note;
+    }
+
+    // ── STORAGE ──────────────────────────────────────────────
+    parseSizeBytes(sizeStr) {
+        // Parse formatted string like "1.2 MB" back to bytes
+        if(!sizeStr) return 0;
+        const m = sizeStr.match(/([\d.]+)\s*(B|KB|MB|GB)/i);
+        if(!m) return 0;
+        const val=parseFloat(m[1]), unit=m[2].toUpperCase();
+        return Math.round(val * ({'B':1,'KB':1024,'MB':1048576,'GB':1073741824}[unit]||1));
+    }
+    getTotalBytes() {
+        return this.getAllNotes().reduce((acc,n)=>{
+            return acc + (n.sizeBytes || this.parseSizeBytes(n.size) || 0);
+        }, 0);
+    }
+    getStorageByType() {
+        const r={pdf:0,docx:0,text:0,binary:0};
+        this.getAllNotes().forEach(n=>{
+            const b=n.sizeBytes||this.parseSizeBytes(n.size)||0;
+            r[n.fileKind in r ? n.fileKind : 'binary']+=b;
+        });
+        return r;
+    }
+    getNotesSortedBySize() {
+        return this.getAllNotes()
+            .map(n=>({...n, _bytes: n.sizeBytes||this.parseSizeBytes(n.size)||0}))
+            .sort((a,b)=>b._bytes-a._bytes);
     }
     deleteNote(noteId, folderId) {
         const folder = this.findById(folderId); if(!folder) return null;
@@ -143,6 +171,26 @@ class FolderStructure {
         return [];
     }
     getStats(folderId) { const c=this.getContents(folderId); return c?{folders:c.subFolders.length,notes:c.notes.length}:null; }
+
+    // ── Collect all notes across every folder (recursive) ──
+    getAllNotes(node=this.root, arr=[]) {
+        node.notes.forEach(n => { n._folderId = node.id; arr.push(n); });
+        node.subFolders.forEach(s => this.getAllNotes(s, arr));
+        return arr;
+    }
+    getRecentNotes(limit=10) {
+        return this.getAllNotes()
+            .filter(n => n.lastAccessed && !n.archived)
+            .sort((a,b) => (b.lastAccessed||0)-(a.lastAccessed||0))
+            .slice(0, limit);
+    }
+    getPinnedNotes() { return this.getAllNotes().filter(n => n.pinned && !n.archived); }
+    getArchivedNotes() { return this.getAllNotes().filter(n => n.archived); }
+    findNoteParentId(noteId, node=this.root) {
+        if(node.notes.find(n=>n.id===noteId)) return node.id;
+        for(const sub of node.subFolders){ const r=this.findNoteParentId(noteId,sub); if(r) return r; }
+        return null;
+    }
     clearAll() { this.root = this._emptyRoot(); }
 }
 
@@ -151,6 +199,7 @@ class FolderStructure {
 const db          = new FolderStructure();
 let currentUser   = null;
 let currentFolderId = 'root';
+let currentView   = 'library';  // 'library' | 'recent' | 'pinned' | 'archive'
 let selectMode    = false;
 let selectedNotes = new Set();
 
@@ -316,8 +365,63 @@ function getFileMeta(note){ return FILE_KIND_META[note.fileKind]||FILE_KIND_META
 
 // ── FOLDER GRID ───────────────────────────────────────────────
 
+function buildNoteCardHtml(note, showLocation=false) {
+    const meta=getFileMeta(note), canView=note.content||note.storageRef;
+    const clickCls=selectMode?'note-card-selectable':(canView?'note-card-clickable':'');
+    const selCls=selectedNotes.has(note.id)?'note-card-selected':'';
+    const pinnedIcon=note.pinned?`<button class="note-pin-btn note-pin-btn--active" data-note-id="${note.id}" title="Unpin"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>`:`<button class="note-pin-btn" data-note-id="${note.id}" title="Pin"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>`;
+    const archiveIcon=note.archived?`<button class="note-archive-btn note-archive-btn--active" data-note-id="${note.id}" title="Unarchive"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><polyline points="9 11 12 14 15 11"/></svg></button>`:`<button class="note-archive-btn" data-note-id="${note.id}" title="Archive"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></button>`;
+    const locationBadge=showLocation&&note._folderId?`<span class="note-location">${db.findById(note._folderId)?.name||'Root'}</span>`:'';
+    return `<div class="note-card ${clickCls} ${selCls}" data-note-id="${note.id}">
+        <label class="note-checkbox"><input type="checkbox" class="note-check" data-note-id="${note.id}" ${selectedNotes.has(note.id)?'checked':''}><span class="note-check-ui"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span></label>
+        <div class="note-icon-wrap note-icon-${note.fileKind||'binary'}">${meta.icon}</div>
+        <div class="note-info">
+            <div class="note-name-row"><span class="note-badge ${meta.badgeClass}">${meta.badge}</span><span class="note-name" title="${esc(note.name)}">${esc(note.name)}</span>${locationBadge}</div>
+            <div class="note-size">${note.size} · ${note.addedDate}</div>
+            <div class="${meta.hintClass}">${selectMode?'Click to select':meta.hint}</div>
+        </div>
+        <div class="note-card-actions">
+            ${pinnedIcon}${archiveIcon}
+            <button class="note-delete-btn" data-note-id="${note.id}" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
+        </div>
+    </div>`;
+}
+
 function renderFolderGrid() {
-    const grid=document.getElementById('folderGrid'), contents=db.getContents(currentFolderId);
+    const grid=document.getElementById('folderGrid');
+
+    // ── Special views ──────────────────────────────────────
+    if(currentView==='recent') {
+        const notes=db.getRecentNotes(10);
+        updateViewHeader('Recent Files','Files you accessed lately');
+        if(!notes.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><p class="empty-title">No recent files</p><p class="empty-sub">Files you open will appear here.</p></div>`; return; }
+        grid.innerHTML = notes.map(n=>buildNoteCardHtml(n,true)).join('');
+        attachGridListeners(); return;
+    }
+    if(currentView==='pinned') {
+        const notes=db.getPinnedNotes();
+        updateViewHeader('Pinned Files','Your bookmarked files');
+        if(!notes.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><p class="empty-title">No pinned files</p><p class="empty-sub">Pin a file using the bookmark icon on any note card.</p></div>`; return; }
+        grid.innerHTML = notes.map(n=>buildNoteCardHtml(n,true)).join('');
+        attachGridListeners(); return;
+    }
+    if(currentView==='archive') {
+        const notes=db.getArchivedNotes();
+        updateViewHeader('Archive','Files hidden from your main library');
+        if(!notes.length){ grid.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div><p class="empty-title">Archive is empty</p><p class="empty-sub">Archive notes to hide them from the main library.</p></div>`; return; }
+        grid.innerHTML = notes.map(n=>buildNoteCardHtml(n,true)).join('');
+        attachGridListeners(); return;
+    }
+
+    if(currentView==='storage') {
+        updateViewHeader('Storage','Your vault's storage breakdown');
+        renderStorageView();
+        return;
+    }
+
+    // ── Library view (default) ─────────────────────────────
+    updateViewHeader('Academic Collection','');
+    const contents=db.getContents(currentFolderId);
     if(!contents){ grid.innerHTML=`<div class="empty-state"><p class="empty-title">Folder not found</p></div>`; return; }
     let html='';
 
@@ -334,21 +438,8 @@ function renderFolderGrid() {
         </div>`;
     });
 
-    contents.notes.forEach(note => {
-        const meta=getFileMeta(note), canView=note.content||note.storageRef;
-        const clickCls=selectMode?'note-card-selectable':(canView?'note-card-clickable':'');
-        const selCls=selectedNotes.has(note.id)?'note-card-selected':'';
-        html+=`<div class="note-card ${clickCls} ${selCls}" data-note-id="${note.id}">
-            <label class="note-checkbox"><input type="checkbox" class="note-check" data-note-id="${note.id}" ${selectedNotes.has(note.id)?'checked':''}><span class="note-check-ui"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span></label>
-            <div class="note-icon-wrap note-icon-${note.fileKind||'binary'}">${meta.icon}</div>
-            <div class="note-info">
-                <div class="note-name-row"><span class="note-badge ${meta.badgeClass}">${meta.badge}</span><span class="note-name" title="${esc(note.name)}">${esc(note.name)}</span></div>
-                <div class="note-size">${note.size} · ${note.addedDate}</div>
-                <div class="${meta.hintClass}">${selectMode?'Click to select':meta.hint}</div>
-            </div>
-            <button class="note-delete-btn" data-note-id="${note.id}" title="Delete file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
-        </div>`;
-    });
+    // Hide archived notes in library view
+    contents.notes.filter(n=>!n.archived).forEach(note => { html+=buildNoteCardHtml(note); });
 
     if(!html) html=`<div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div><p class="empty-title">This folder is empty</p><p class="empty-sub">Upload notes or create a subfolder.</p></div>`;
     grid.innerHTML = html;
@@ -414,15 +505,242 @@ function attachGridListeners() {
 
     document.querySelectorAll('.note-card-clickable').forEach(card => {
         card.addEventListener('click', e => {
-            if(e.target.closest('.note-delete-btn')) return;
+            if(e.target.closest('.note-delete-btn')||e.target.closest('.note-pin-btn')||e.target.closest('.note-archive-btn')) return;
             const note=db.findNoteById(card.dataset.noteId); if(note) viewFile(note);
+        });
+    });
+
+    // ── PIN ────────────────────────────────────────────────
+    document.querySelectorAll('.note-pin-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const note=db.findNoteById(btn.dataset.noteId); if(!note) return;
+            note.pinned = !note.pinned;
+            showToast(note.pinned ? `"${note.name}" pinned` : `"${note.name}" unpinned`, 'info');
+            saveAndRender();
+        });
+    });
+
+    // ── ARCHIVE ────────────────────────────────────────────
+    document.querySelectorAll('.note-archive-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const note=db.findNoteById(btn.dataset.noteId); if(!note) return;
+            note.archived = !note.archived;
+            if(note.archived && note.pinned) note.pinned = false;
+            showToast(note.archived ? `"${note.name}" archived` : `"${note.name}" restored to library`, 'info');
+            saveAndRender();
         });
     });
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────
 
-function renderAll(){ renderFolderGrid(); renderBreadcrumb(); updateToolbarInfo(); updateBulkBar(); }
+
+// ── STORAGE VIEW ──────────────────────────────────────────────
+const CLOUDINARY_LIMIT = 25 * 1024 * 1024 * 1024; // 25 GB free
+const FIRESTORE_LIMIT  =  1 * 1024 * 1024 * 1024; // 1 GB free
+
+function renderStorageView() {
+    const grid = document.getElementById('folderGrid');
+    const totalBytes = db.getTotalBytes();
+    const byType = db.getStorageByType();
+    const allNotes = db.getNotesSortedBySize();
+    const pct = Math.min((totalBytes / CLOUDINARY_LIMIT) * 100, 100);
+    const pctStr = pct < 0.01 ? '<0.01' : pct.toFixed(2);
+
+    // Type breakdown rows
+    const typeData = [
+        { key:'pdf',    label:'PDF Files',   color:'var(--pdf)',  icon:'📄' },
+        { key:'docx',   label:'Word Docs',   color:'var(--docx)', icon:'📝' },
+        { key:'text',   label:'Text Files',  color:'var(--txt)',  icon:'💻' },
+        { key:'binary', label:'Other Files', color:'var(--bin)',  icon:'📦' },
+    ];
+    const typeRows = typeData.map(t => {
+        const b = byType[t.key] || 0;
+        const p = totalBytes > 0 ? Math.min((b/totalBytes)*100,100) : 0;
+        return `<div class="sv-type-row">
+            <div class="sv-type-label">
+                <span class="sv-type-dot" style="background:${t.color}"></span>
+                <span>${t.label}</span>
+            </div>
+            <div class="sv-type-bar-track"><div class="sv-type-bar-fill" style="width:${p.toFixed(1)}%;background:${t.color}"></div></div>
+            <span class="sv-type-size">${fmtSize(b)}</span>
+        </div>`;
+    }).join('');
+
+    // Top files list
+    const topFiles = allNotes.slice(0, 12);
+    const fileRows = topFiles.length ? topFiles.map(n => {
+        const pf = totalBytes>0 ? Math.min((n._bytes/totalBytes)*100,100) : 0;
+        const meta = getFileMeta(n);
+        return `<div class="sv-file-row" data-note-id="${n.id}">
+            <div class="sv-file-icon note-icon-wrap note-icon-${n.fileKind||'binary'}">${meta.icon}</div>
+            <div class="sv-file-info">
+                <p class="sv-file-name">${esc(n.name)}</p>
+                <div class="sv-file-bar-track"><div class="sv-file-bar-fill" style="width:${pf.toFixed(1)}%;background:${meta.barColor||'var(--gold)'}"></div></div>
+            </div>
+            <span class="sv-file-size">${fmtSize(n._bytes)}</span>
+            <button class="sv-file-delete" data-note-id="${n.id}" title="Delete">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+            </button>
+        </div>`;
+    }).join('') : `<p class="sv-empty-files">No files uploaded yet.</p>`;
+
+    // Status badge
+    let statusClass = 'sv-status--safe', statusText = 'Plenty of space available';
+    if(pct > 80) { statusClass='sv-status--warn'; statusText='Storage getting full'; }
+    if(pct > 95) { statusClass='sv-status--danger'; statusText='Almost full — consider deleting files'; }
+
+    grid.innerHTML = `
+    <div class="storage-view">
+
+        <!-- Hero card: total usage -->
+        <div class="sv-hero-card">
+            <div class="sv-hero-left">
+                <p class="sv-hero-label">TOTAL STORAGE USED</p>
+                <p class="sv-hero-value">${fmtSize(totalBytes)}</p>
+                <p class="sv-hero-sub">of 25 GB free (Cloudinary) · ${pctStr}% used</p>
+                <span class="sv-status ${statusClass}">${statusText}</span>
+            </div>
+            <div class="sv-hero-right">
+                <div class="sv-donut-wrap">
+                    <svg width="120" height="120" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="48" fill="none" stroke="var(--surface-hi)" stroke-width="14"/>
+                        <circle cx="60" cy="60" r="48" fill="none" stroke="url(#sg)" stroke-width="14"
+                            stroke-dasharray="${(pct/100*301.6).toFixed(1)} 301.6"
+                            stroke-dashoffset="75.4" stroke-linecap="round"/>
+                        <defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="var(--gold)"/>
+                            <stop offset="100%" stop-color="var(--gold-mid)"/>
+                        </linearGradient></defs>
+                    </svg>
+                    <div class="sv-donut-center">
+                        <span class="sv-donut-pct">${pctStr}%</span>
+                        <span class="sv-donut-label">used</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two column layout -->
+        <div class="sv-cols">
+
+            <!-- Left: breakdown + perks -->
+            <div class="sv-col">
+
+                <!-- Type breakdown -->
+                <div class="sv-card">
+                    <h3 class="sv-card-title">By File Type</h3>
+                    <div class="sv-type-list">${typeRows}</div>
+                </div>
+
+                <!-- Storage perks / limits info -->
+                <div class="sv-card sv-card--perks">
+                    <h3 class="sv-card-title">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        Free Tier Limits
+                    </h3>
+                    <div class="sv-perks-list">
+                        <div class="sv-perk">
+                            <div class="sv-perk-icon sv-perk-icon--pdf">☁️</div>
+                            <div class="sv-perk-info">
+                                <p class="sv-perk-name">Cloudinary (PDF Storage)</p>
+                                <p class="sv-perk-val">25 GB storage · 25 GB bandwidth/month</p>
+                            </div>
+                            <span class="sv-perk-badge sv-perk-badge--free">FREE</span>
+                        </div>
+                        <div class="sv-perk">
+                            <div class="sv-perk-icon sv-perk-icon--db">🔥</div>
+                            <div class="sv-perk-info">
+                                <p class="sv-perk-name">Firestore (Notes &amp; Data)</p>
+                                <p class="sv-perk-val">1 GB storage · 50K reads/day · 20K writes/day</p>
+                            </div>
+                            <span class="sv-perk-badge sv-perk-badge--free">FREE</span>
+                        </div>
+                        <div class="sv-perk">
+                            <div class="sv-perk-icon sv-perk-icon--auth">🔐</div>
+                            <div class="sv-perk-info">
+                                <p class="sv-perk-name">Firebase Auth</p>
+                                <p class="sv-perk-val">Unlimited users · Google Sign-In included</p>
+                            </div>
+                            <span class="sv-perk-badge sv-perk-badge--free">FREE</span>
+                        </div>
+                        <div class="sv-perk sv-perk--highlight">
+                            <div class="sv-perk-icon sv-perk-icon--total">⭐</div>
+                            <div class="sv-perk-info">
+                                <p class="sv-perk-name">Your Vault Total</p>
+                                <p class="sv-perk-val">${allNotes.length} file${allNotes.length!==1?'s':''} · ${fmtSize(totalBytes)} used · ${fmtSize(CLOUDINARY_LIMIT - totalBytes)} remaining</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: top files by size -->
+            <div class="sv-col">
+                <div class="sv-card sv-card--files">
+                    <div class="sv-card-header">
+                        <h3 class="sv-card-title">Largest Files</h3>
+                        <span class="sv-card-sub">${allNotes.length} total file${allNotes.length!==1?'s':''}</span>
+                    </div>
+                    <div class="sv-file-list" id="svFileList">${fileRows}</div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+
+    // Wire delete buttons
+    grid.querySelectorAll('.sv-file-delete').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const noteId = btn.dataset.noteId;
+            const note = db.findNoteById(noteId);
+            if(!note) return;
+            if(!confirm(`Delete "${note.name}"? This cannot be undone.`)) return;
+            const folderId = db.findNoteParentId(noteId);
+            if(folderId) { db.deleteNote(noteId, folderId); saveAndRender(); }
+        });
+    });
+}
+
+// ── SIDEBAR STORAGE WIDGET UPDATE ─────────────────────────────
+function updateSidebarStorage() {
+    const bar  = document.getElementById('sbStorageBarFill');
+    const info = document.getElementById('sbStorageInfo');
+    if(!bar || !info) return;
+    const total = db.getTotalBytes();
+    const pct = Math.min((total / CLOUDINARY_LIMIT) * 100, 100);
+    bar.style.width = pct.toFixed(2) + '%';
+    // Colour: green → amber → red
+    if(pct > 80) bar.style.background = 'var(--red)';
+    else if(pct > 50) bar.style.background = 'linear-gradient(90deg,var(--gold),var(--gold-mid))';
+    else bar.style.background = 'var(--gold-grad)';
+    info.textContent = `${fmtSize(total)} of 25 GB used`;
+}
+
+
+function updateViewHeader(title, sub) {
+    const el = document.querySelector('.content-title');
+    if(el) el.textContent = title;
+}
+
+function setView(view) {
+    currentView = view;
+    // Update sidebar active state
+    document.querySelectorAll('.sb-nav-item').forEach(a => {
+        a.classList.remove('sb-nav-item--active');
+        const v = a.dataset.view || 'library';
+        if(v === view) a.classList.add('sb-nav-item--active');
+    });
+    // Show/hide toolbar actions (only relevant in library)
+    const toolbarActions = document.querySelector('.content-toolbar');
+    if(toolbarActions) toolbarActions.style.display = (view==='library') ? '' : 'none';
+    exitSelectMode();
+    renderAll();
+}
+
+function renderAll(){ renderFolderGrid(); if(currentView==='library') renderBreadcrumb(); updateToolbarInfo(); updateBulkBar(); updateSidebarStorage(); }
 
 // ── SELECT MODE ───────────────────────────────────────────────
 
@@ -441,6 +759,10 @@ async function viewFile(note) {
     badge.textContent=meta.badge; badge.className=`file-type-badge ${meta.badgeClass}`;
     document.getElementById('fileViewTitle').textContent=note.name;
     document.getElementById('downloadFileBtn').dataset.noteId=note.id;
+    // Track last accessed for Recent view
+    note.lastAccessed = Date.now();
+    if(currentUser) db.saveToCloud(currentUser.uid).catch(()=>{});
+    else db._saveCache();
     modal.open('viewFileModal');
 
     switch(note.fileKind) {
@@ -555,10 +877,10 @@ const uploader = {
         this.setProgress(1,`Uploading 0 of ${total}…`);
 
         for(const file of this.files) {
-            const size=fmtSize(file.size), kind=this.classify(file);
+            const size=fmtSize(file.size), sizeB=file.size, kind=this.classify(file);
 
             if(kind==='pdf') {
-                const note=db.addNote(currentFolderId,file.name,size,'pdf','application/pdf');
+                const note=db.addNote(currentFolderId,file.name,size,'pdf','application/pdf',sizeB);
                 if(!note){ advance(false); continue; }
                 try {
                     const userFolder = currentUser ? currentUser.uid : 'guest';
@@ -585,7 +907,7 @@ const uploader = {
                 if(typeof mammoth==='undefined'){ showToast('mammoth.js not loaded','error'); db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); continue; }
                 try {
                     const buf=await file.arrayBuffer(), result=await mammoth.convertToHtml({arrayBuffer:buf});
-                    const note=db.addNote(currentFolderId,file.name,size,'docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                    const note=db.addNote(currentFolderId,file.name,size,'docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',sizeB);
                     if(note) note.content=result.value; advance();
                 } catch(err){ console.error('DOCX error:',err); showToast(`Could not convert "${file.name}"`,'error'); db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); }
                 continue;
@@ -594,7 +916,7 @@ const uploader = {
             if(kind==='doc'){ showToast(`"${file.name}" is old .doc format — stored as reference`,'info'); db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); continue; }
 
             if(kind==='text') {
-                try { const text=await file.text(); const note=db.addNote(currentFolderId,file.name,size,'text',file.type||'text/plain'); if(note) note.content=text; advance(); }
+                try { const text=await file.text(); const note=db.addNote(currentFolderId,file.name,size,'text',file.type||'text/plain',sizeB); if(note) note.content=text; advance(); }
                 catch(err){ db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); }
                 continue;
             }
@@ -633,6 +955,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     uploader.init();
+
+    // ── SIDEBAR NAV ─────────────────────────────────────────
+    document.querySelectorAll('.sb-nav-item').forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            const view = a.dataset.view || 'library';
+            if(view === 'library') currentFolderId = 'root';
+            setView(view);
+        });
+    });
+    // Sidebar storage manage button
+    const sbManageBtn = document.querySelector('.sb-storage-manage');
+    if(sbManageBtn) sbManageBtn.addEventListener('click', () => setView('storage'));
 
     document.getElementById('googleSignInBtn').addEventListener('click', ()=>{
         auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())

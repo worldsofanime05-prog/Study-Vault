@@ -1364,19 +1364,35 @@ h1,h2,h3 { font-family: var(--f-serif); }
     margin-bottom: 0.5rem;
   }
 
-  /* Font picker menu — full width on mobile */
+  /* Font picker menu — full width on mobile, solid overlay */
   .font-picker .fp-menu {
     right: auto;
-    left: auto;
     width: calc(100vw - 2rem);
     position: fixed;
-    bottom: 5rem;
+    bottom: 5.5rem;
     left: 1rem;
     border-radius: var(--radius-xl);
     padding: 1rem;
     z-index: 9000;
+    background: var(--paper) !important;
+    opacity: 1 !important;
+    visibility: visible;
+    box-shadow: var(--shadow-modal);
+    border: 1px solid var(--ink-4);
   }
-  .fp-opt { padding: 0.75rem 0.75rem; font-size: 0.88rem; }
+  /* Only show font menu when button is focused/active */
+  .font-picker .fp-menu {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .font-picker:focus-within .fp-menu,
+  .font-picker.fp-open .fp-menu {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+  .fp-opt { padding: 0.875rem 0.75rem; font-size: 0.9rem; border-radius: var(--radius-md); }
 
   /* Top bar logo area */
   .top-bar-logo { font-size: 1rem; }
@@ -1446,3 +1462,38 @@ h1,h2,h3 { font-family: var(--f-serif); }
     gap: 0.25rem;
   }
 }
+
+/* ── Mobile User Sheet (sign out) ──────────────────────── */
+.mobile-user-sheet {
+  display: none;
+  position: fixed;
+  bottom: 5.5rem; left: 1rem; right: 1rem;
+  background: var(--paper);
+  border: 1px solid var(--ink-4);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  z-index: 9500;
+  box-shadow: var(--shadow-modal);
+  transform: translateY(10px);
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+.mobile-user-sheet.mus-open {
+  display: block;
+  transform: translateY(0);
+  opacity: 1;
+}
+.mus-header { margin-bottom: 1rem; padding-bottom: 0.875rem; border-bottom: 1px solid var(--ink-4); }
+.mus-name { font-size: 1rem; font-weight: 700; color: var(--ink); }
+.mus-role { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); margin-top: 2px; }
+.mus-actions { display: flex; flex-direction: column; gap: 6px; }
+.mus-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0.875rem 1rem; border-radius: var(--radius-md);
+  font-family: var(--f-body); font-size: 0.9rem; font-weight: 600;
+  color: var(--ink-2); background: var(--surface-lo);
+  cursor: pointer; transition: all 0.15s ease;
+}
+.mus-btn:hover { background: var(--surface); color: var(--ink); }
+.mus-btn--danger { color: var(--red); }
+.mus-btn--danger:hover { background: rgba(220,38,38,0.08); }

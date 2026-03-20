@@ -213,19 +213,20 @@ function showLogin()   { document.getElementById('appLoading').style.display='no
 function setUserBadge(user) {
     const avatar = document.getElementById('userAvatar');
     const guestAv = document.getElementById('guestAvatar');
+    const displayName = user ? (user.displayName?.split(' ')[0]||user.email) : 'Guest';
+    // Update top bar badge name
+    const ubName = document.getElementById('userBadgeName');
+    if(ubName) ubName.textContent = displayName;
+    // Update sidebar identity
+    const sbName = document.getElementById('userName');
+    if(sbName) sbName.textContent = user ? (user.displayName||user.email) : 'The Archivist';
     if(user) {
         avatar.src = user.photoURL||'';
         avatar.style.display = '';
         guestAv.style.display = 'none';
-        document.getElementById('userName').textContent = user.displayName?.split(' ')[0]||user.email;
-        document.getElementById('userBadge').style.display = '';
-        document.getElementById('signOutBtn').style.display = '';
     } else {
         avatar.style.display = 'none';
         guestAv.style.display = 'flex';
-        document.getElementById('userName').textContent = 'Guest';
-        document.getElementById('userBadge').style.display = '';
-        document.getElementById('signOutBtn').style.display = '';
     }
 }
 
@@ -606,10 +607,10 @@ const uploader = {
 // ── INIT ──────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // ── THEME + FONT TOGGLE ───────────────────────────────────
+    // ── THEME TOGGLE ───────────────────────────────────────────
     function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme') || 'dark';
-        const next = current === 'dark' ? 'light' : 'dark';
+        const cur = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = cur === 'light' ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('sv_theme', next);
     }
@@ -619,14 +620,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if(loginThemeBtn) loginThemeBtn.addEventListener('click', toggleTheme);
 
     // ── FONT PICKER ────────────────────────────────────────────
-    document.querySelectorAll('.font-opt').forEach(btn => {
-        const font = btn.dataset.font;
-        if(document.documentElement.getAttribute('data-font') === font) btn.classList.add('active');
+    const curFont = localStorage.getItem('sv_font') || 'jakarta';
+    document.querySelectorAll('.fp-opt').forEach(btn => {
+        if(btn.dataset.font === curFont) btn.classList.add('fp-active');
         btn.addEventListener('click', () => {
+            const font = btn.dataset.font;
             document.documentElement.setAttribute('data-font', font);
             localStorage.setItem('sv_font', font);
-            document.querySelectorAll('.font-opt').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            document.querySelectorAll('.fp-opt').forEach(b => b.classList.remove('fp-active'));
+            btn.classList.add('fp-active');
         });
     });
 

@@ -476,17 +476,8 @@ function renderFolderGrid() {
     if(!contents){ grid.innerHTML=`<div class="empty-state"><p class="empty-title">Folder not found</p></div>`; return; }
     let html='';
 
-    contents.subFolders.forEach(folder => {
-        const info=`${folder.subFolders.length} folder${folder.subFolders.length!==1?'s':''} · ${folder.notes.length} file${folder.notes.length!==1?'s':''}`;
-        html+=`<div class="folder-card" data-folder-id="${folder.id}" role="button" tabindex="0">
-            <div class="folder-icon-wrap"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
-            <div class="folder-name">${esc(folder.name)}</div>
-            <div class="folder-meta">${info}</div>
-            <div class="folder-actions">
-                <button class="folder-btn rename-btn" data-folder-id="${folder.id}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename</button>
-                <button class="folder-btn delete delete-btn" data-folder-id="${folder.id}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>Delete</button>
-            </div>
-        </div>`;
+    contents.subFolders.filter(f => !f.archived).forEach(folder => {
+        html += buildFolderCardHtml(folder);
     });
 
     // Hide archived notes in library view

@@ -367,7 +367,8 @@ h1,h2,h3 { font-family: var(--f-serif); }
 }
 .font-picker:focus-within .fp-menu,
 .fp-trigger:hover ~ .fp-menu,
-.fp-trigger:focus + .fp-menu { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
+.fp-trigger:focus + .fp-menu,
+.font-picker.fp-open .fp-menu { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
 .fp-menu:hover { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
 .fp-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); padding: 0 6px; margin-bottom: 6px; }
 .fp-opt {
@@ -930,17 +931,13 @@ h1,h2,h3 { font-family: var(--f-serif); }
     transition: all 0.2s ease;
     pointer-events: none !important;
   }
-  /* Disable ALL desktop hover/focus triggers on mobile */
-  .font-picker:focus-within .fp-menu,
-  .fp-trigger:hover ~ .fp-menu,
-  .fp-trigger:focus + .fp-menu,
-  .fp-menu:hover {
+  /* ONLY show font picker when JS adds fp-open — block all hover/focus desktop triggers */
+  .font-picker:not(.fp-open) .fp-menu {
     opacity: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
     transform: translateY(8px) !important;
   }
-  /* ONLY show when js adds fp-open class */
   .font-picker.fp-open .fp-menu {
     opacity: 1 !important;
     visibility: visible !important;

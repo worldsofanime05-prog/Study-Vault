@@ -201,7 +201,9 @@ const modal = {
     close(id)  { document.getElementById(id)?.classList.remove('active'); },
     closeAll() { document.querySelectorAll('.modal').forEach(m=>m.classList.remove('active')); }
 };
-document.addEventListener('mousedown', e => { if(e.target.classList.contains('modal')) modal.closeAll(); });
+document.addEventListener('mousedown', e => {
+    if(e.target.classList.contains('modal') || e.target.classList.contains('modal-backdrop')) modal.closeAll();
+});
 
 // ── AUTH ──────────────────────────────────────────────────────
 
@@ -609,20 +611,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginThemeBtn = document.getElementById('loginThemeBtn');
     const savedTheme = localStorage.getItem('studyVaultTheme') || 'dark';
     const isLightOnLoad = savedTheme === 'light';
-    if(isLightOnLoad) {
-        document.body.classList.add('light-theme');
-        themeBtn.textContent = '☀️';
-        loginThemeBtn.textContent = '☀️';
-    }
+    if(isLightOnLoad) document.body.classList.add('light-theme');
     function toggleTheme() {
         const isLight = document.body.classList.toggle('light-theme');
-        const icon = isLight ? '☀️' : '🌙';
-        themeBtn.textContent = icon;
-        loginThemeBtn.textContent = icon;
         localStorage.setItem('studyVaultTheme', isLight ? 'light' : 'dark');
     }
-    themeBtn.addEventListener('click', toggleTheme);
-    loginThemeBtn.addEventListener('click', toggleTheme);
+    if(themeBtn) themeBtn.addEventListener('click', toggleTheme);
+    if(loginThemeBtn) loginThemeBtn.addEventListener('click', toggleTheme);
 
     uploader.init();
 

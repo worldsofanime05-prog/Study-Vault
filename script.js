@@ -209,13 +209,18 @@ function showApp()     { document.getElementById('appLoading').style.display='no
 function showLogin()   { document.getElementById('appLoading').style.display='none'; document.getElementById('loginScreen').style.display=''; document.getElementById('appContainer').style.display='none'; }
 
 function setUserBadge(user) {
+    const avatar = document.getElementById('userAvatar');
+    const guestAv = document.getElementById('guestAvatar');
     if(user) {
-        document.getElementById('userAvatar').src = user.photoURL||'';
+        avatar.src = user.photoURL||'';
+        avatar.style.display = '';
+        guestAv.style.display = 'none';
         document.getElementById('userName').textContent = user.displayName?.split(' ')[0]||user.email;
         document.getElementById('userBadge').style.display = '';
         document.getElementById('signOutBtn').style.display = '';
     } else {
-        document.getElementById('userAvatar').src = '';
+        avatar.style.display = 'none';
+        guestAv.style.display = 'flex';
         document.getElementById('userName').textContent = 'Guest';
         document.getElementById('userBadge').style.display = '';
         document.getElementById('signOutBtn').style.display = '';

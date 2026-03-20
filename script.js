@@ -368,6 +368,23 @@ function renderBreadcrumb() {
         nav.appendChild(a);
         if(!isLast){ const sep=document.createElement('span'); sep.className='crumb-sep'; sep.textContent='›'; nav.appendChild(sep); }
     });
+
+    // Mobile: show back button + current folder name in top bar logo area
+    const mobileBack = document.getElementById('mobileBackBtn');
+    const mobileFolderName = document.getElementById('mobileFolderName');
+    if(mobileBack && mobileFolderName) {
+        if(currentFolderId !== 'root') {
+            const cur = db.findById(currentFolderId);
+            mobileBack.style.display = 'flex';
+            mobileFolderName.textContent = cur ? cur.name : '';
+            mobileFolderName.style.display = 'block';
+            document.getElementById('topBarLogo').style.display = 'none';
+        } else {
+            mobileBack.style.display = 'none';
+            mobileFolderName.style.display = 'none';
+            document.getElementById('topBarLogo').style.display = '';
+        }
+    }
 }
 
 // ── FILE KIND META ────────────────────────────────────────────
@@ -1065,6 +1082,18 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.ctx.parentFolderId = currentFolderId;
         modal.open('createFolderModal');
         setTimeout(() => document.getElementById('folderNameInput').focus(), 80);
+    });
+
+    // Mobile back button
+    const mobileBack = document.getElementById('mobileBackBtn');
+    if(mobileBack) mobileBack.addEventListener('click', () => {
+        const ancestors = db.getAncestors(currentFolderId);
+        if(ancestors.length >= 2) {
+            currentFolderId = ancestors[ancestors.length - 2].id;
+        } else {
+            currentFolderId = 'root';
+        }
+        renderAll();
     });
 
     document.getElementById('googleSignInBtn').addEventListener('click', ()=>{

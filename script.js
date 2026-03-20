@@ -1053,8 +1053,22 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('sv_font', font);
             document.querySelectorAll('.fp-opt').forEach(b => b.classList.remove('fp-active'));
             btn.classList.add('fp-active');
+            // Close picker on mobile after selection
+            document.querySelector('.font-picker')?.classList.remove('fp-open');
         });
     });
+    // Mobile: tap to toggle font picker
+    const fpTrigger = document.querySelector('.fp-trigger');
+    if(fpTrigger) {
+        fpTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const picker = document.querySelector('.font-picker');
+            picker?.classList.toggle('fp-open');
+        });
+        document.addEventListener('click', () => {
+            document.querySelector('.font-picker')?.classList.remove('fp-open');
+        });
+    }
 
     uploader.init();
 
@@ -1088,6 +1102,55 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Mobile back button
+    // Mobile sign out sheet — tap avatar to open
+    const userBadge = document.getElementById('userBadge');
+    if(userBadge) {
+        userBadge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Only show sheet on mobile
+            if(window.innerWidth > 768) return;
+            let sheet = document.getElementById('mobileUserSheet');
+            if(!sheet) {
+                sheet = document.createElement('div');
+                sheet.id = 'mobileUserSheet';
+                sheet.className = 'mobile-user-sheet';
+                sheet.innerHTML = `
+                    <div class="mus-header">
+                        <p class="mus-name" id="musName">Guest</p>
+                        <p class="mus-role">RESEARCHER</p>
+                    </div>
+                    <div class="mus-actions">
+                        <button class="mus-btn" id="musSignOut">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Sign Out
+                        </button>
+                        <button class="mus-btn mus-btn--danger" id="musClear">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                            Clear All Data
+                        </button>
+                    </div>`;
+                document.body.appendChild(sheet);
+                document.getElementById('musSignOut').addEventListener('click', () => {
+                    sheet.classList.remove('mus-open');
+                    document.getElementById('signOutBtn').click();
+                });
+                document.getElementById('musClear').addEventListener('click', () => {
+                    sheet.classList.remove('mus-open');
+                    document.getElementById('clearDataBtn').click();
+                });
+                document.addEventListener('click', (ev) => {
+                    if(!sheet.contains(ev.target) && !userBadge.contains(ev.target)) {
+                        sheet.classList.remove('mus-open');
+                    }
+                });
+            }
+            // Update name
+            const musName = document.getElementById('musName');
+            if(musName) musName.textContent = document.getElementById('userBadgeName')?.textContent || 'Guest';
+            sheet.classList.toggle('mus-open');
+        });
+    }
+
     const mobileBack = document.getElementById('mobileBackBtn');
     if(mobileBack) mobileBack.addEventListener('click', () => {
         const ancestors = db.getAncestors(currentFolderId);

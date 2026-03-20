@@ -107,6 +107,8 @@ body{font-family:var(--font-body);background:var(--ink);color:var(--text-1);line
 /* User badge */
 .user-badge{display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.75rem 0.3rem 0.4rem;background:var(--surface-2);border:1px solid var(--border);border-radius:30px;}
 .user-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold-border);}
+.user-avatar-wrap{width:26px;height:26px;flex-shrink:0;}
+.guest-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--surface-3),var(--surface-4));border:1.5px solid var(--gold-border);display:flex;align-items:center;justify-content:center;}
 .user-name{font-size:0.8rem;font-weight:600;color:var(--text-1);}
 
 /* ── BUTTONS ──────────────────────────────────────────────── */

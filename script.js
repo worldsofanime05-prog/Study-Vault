@@ -1,4 +1,4 @@
-  /* ============================================================
+ /* ============================================================
    STUDYVAULT  v3.0  —  Firebase Edition
    ============================================================
    SETUP INSTRUCTIONS
@@ -536,8 +536,8 @@ function renderFolderGrid() {
 
 function attachGridListeners() {
     document.querySelectorAll('.folder-card').forEach(card => {
-        card.addEventListener('click', e => { if(e.target.closest('.folder-actions')) return; currentFolderId=card.dataset.folderId; renderAll(); });
-        card.addEventListener('keydown', e => { if((e.key==='Enter'||e.key===' ')&&!e.target.closest('.folder-actions')){ e.preventDefault(); currentFolderId=card.dataset.folderId; renderAll(); } });
+        card.addEventListener('click', e => { if(e.target.closest('.folder-actions')) return; currentFolderId=card.dataset.folderId; setView('library'); });
+        card.addEventListener('keydown', e => { if((e.key==='Enter'||e.key===' ')&&!e.target.closest('.folder-actions')){ e.preventDefault(); currentFolderId=card.dataset.folderId; setView('library'); } });
     });
 
     // ── FOLDER PIN ────────────────────────────────────────

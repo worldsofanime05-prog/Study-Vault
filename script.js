@@ -1,4 +1,4 @@
- /* ============================================================
+  /* ============================================================
    STUDYVAULT  v3.0  —  Firebase Edition
    ============================================================
    SETUP INSTRUCTIONS
@@ -134,6 +134,7 @@ class FolderStructure {
         const folder = this.findById(folderId); if(!folder) return null;
         const note = { id:this._uid(), name, size, sizeBytes, fileKind, mimeType,
             content:null, storageRef:null,
+            lastAccessed: Date.now(),
             addedDate: new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) };
         folder.notes.push(note); return note;
     }
@@ -206,6 +207,16 @@ class FolderStructure {
     findNoteParentId(noteId, node=this.root) {
         if(node.notes.find(n=>n.id===noteId)) return node.id;
         for(const sub of node.subFolders){ const r=this.findNoteParentId(noteId,sub); if(r) return r; }
+        return null;
+    }
+    findFolderParentId(folderId, node=this.root) {
+        if(node.subFolders.find(f=>f.id===folderId)) return node.id;
+        for(const sub of node.subFolders){ const r=this.findFolderParentId(folderId,sub); if(r) return r; }
+        return null;
+    }
+    findFolderParentId(folderId, node=this.root) {
+        if(node.subFolders.find(f=>f.id===folderId)) return node.id;
+        for(const sub of node.subFolders){ const r=this.findFolderParentId(folderId,sub); if(r) return r; }
         return null;
     }
     clearAll() { this.root = this._emptyRoot(); }
@@ -286,9 +297,9 @@ function setUserBadge(user) {
     // Update sidebar identity
     const sbName = document.getElementById('userName');
     if(sbName) sbName.textContent = user ? (user.displayName||user.email) : 'The Archivist';
-    // Set username on dropdown for mobile ::before label
-    const userMenu = document.querySelector('.user-menu');
-    if(userMenu) userMenu.setAttribute('data-username', displayName);
+    // Update mobile user sheet name if open
+    const musNameEl = document.getElementById('musName');
+    if(musNameEl) musNameEl.textContent = displayName;
     if(user) {
         avatar.src = user.photoURL||'';
         avatar.style.display = 'block';
@@ -306,9 +317,15 @@ auth.onAuthStateChanged(async user => {
         if (db._loadCache()) renderAll();
         showApp();
         setSyncState('saving');
-        await db.loadFromCloud(user.uid);
-        await migrateFromLocalStorage(user.uid);
-        setSyncState('saved');
+        try {
+            await db.loadFromCloud(user.uid);
+            await migrateFromLocalStorage(user.uid);
+            setSyncState('saved');
+        } catch(err) {
+            console.error('Cloud sync failed:', err);
+            setSyncState('error');
+            showToast('Cloud sync failed — showing local data', 'info');
+        }
         renderAll();
     } else {
         // Check if user chose guest mode
@@ -561,7 +578,10 @@ function attachGridListeners() {
         btn.addEventListener('click', e => {
             e.stopPropagation();
             const f=db.findById(btn.dataset.folderId); if(!f) return;
-            if(confirm(`Delete "${f.name}" and all its contents?\nThis cannot be undone.`)){ db.deleteFolder(btn.dataset.folderId,currentFolderId); showToast(`"${f.name}" deleted`); saveAndRender(); }
+            if(confirm(`Delete "${f.name}" and all its contents?\nThis cannot be undone.`)){
+                const actualParentId = db.findFolderParentId(btn.dataset.folderId) || currentFolderId;
+                db.deleteFolder(btn.dataset.folderId, actualParentId);
+                showToast(`"${f.name}" deleted`); saveAndRender(); }
         });
     });
 
@@ -887,11 +907,16 @@ async function viewFile(note) {
             try {
                 const url = note.storageRef;
                 if(!url) throw new Error('No URL');
-                // Open PDF in new tab for best compatibility
-                window.open(url, '_blank');
-                modal.close('viewFileModal');
-                showToast('PDF opened in new tab', 'info');
-                showPanel('panelUnsupported');
+                // Try to show PDF in iframe first
+                const frame = document.getElementById('pdfFrame');
+                frame.src = url;
+                showPanel('panelPdf');
+                // Fallback: if iframe fails (CORS), open in new tab
+                frame.onerror = () => {
+                    showPanel('panelUnsupported');
+                    document.getElementById('unsupportedMsg').textContent = 'PDF preview blocked — click Download to open';
+                    window.open(url, '_blank');
+                };
             } catch(err) {
                 console.error('PDF load error:',err);
                 document.getElementById('unsupportedMsg').textContent='Could not load PDF.';
@@ -991,7 +1016,6 @@ const uploader = {
                 const note=db.addNote(currentFolderId,file.name,size,'pdf','application/pdf',sizeB);
                 if(!note){ advance(false); continue; }
                 try {
-                    const userFolder = currentUser ? currentUser.uid : 'guest';
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
@@ -1050,7 +1074,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if(loginThemeBtn) loginThemeBtn.addEventListener('click', toggleTheme);
 
     // ── FONT PICKER ────────────────────────────────────────────
-    // fp-opt handled by fp-modal-opt above
     // ── FONT PICKER MODAL ─────────────────────────────────────
     const fontPickerBtn = document.getElementById('fontPickerBtn');
     const fontPickerModal = document.getElementById('fontPickerModal');
@@ -1273,7 +1296,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('selectModeBtn').addEventListener('click',   ()=>selectMode?exitSelectMode():enterSelectMode());
     document.getElementById('cancelSelectBtn').addEventListener('click',  exitSelectMode);
-    document.getElementById('selectAllBtn').addEventListener('click', ()=>{ const c=db.getContents(currentFolderId); if(c) c.notes.forEach(n=>selectedNotes.add(n.id)); renderFolderGrid(); updateBulkBar(); });
+    document.getElementById('selectAllBtn').addEventListener('click', ()=>{
+        if(currentView === 'library') {
+            const c = db.getContents(currentFolderId);
+            if(c) c.notes.filter(n=>!n.archived).forEach(n=>selectedNotes.add(n.id));
+        } else if(currentView === 'recent') {
+            db.getRecentNotes(10).forEach(n=>selectedNotes.add(n.id));
+        } else if(currentView === 'pinned') {
+            db.getPinnedNotes().forEach(n=>selectedNotes.add(n.id));
+        } else if(currentView === 'archive') {
+            db.getArchivedNotes().forEach(n=>selectedNotes.add(n.id));
+        }
+        renderFolderGrid(); updateBulkBar();
+    });
     document.getElementById('deselectAllBtn').addEventListener('click', ()=>{ selectedNotes.clear(); renderFolderGrid(); updateBulkBar(); });
     document.getElementById('bulkDeleteBtn').addEventListener('click', async ()=>{
         const count=selectedNotes.size;
@@ -1282,7 +1317,17 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`${count} file${count!==1?'s':''} deleted`); exitSelectMode(); saveAndRender();
     });
 
-    document.addEventListener('contextmenu', e=>e.preventDefault());
     document.addEventListener('click', ()=>document.getElementById('contextMenu').classList.remove('active'));
-    document.addEventListener('keydown', e=>{ if(e.key==='Escape') modal.closeAll(); });
+    document.addEventListener('keydown', e=>{
+        if(e.key==='Escape') {
+            // If upload modal is open and has files queued, confirm before closing
+            const uploadOpen = document.getElementById('uploadNotesModal').classList.contains('active');
+            if(uploadOpen && uploader.files && uploader.files.length > 0) {
+                if(!confirm('You have files ready to upload. Close anyway?')) return;
+                uploader.files = [];
+                uploader.renderList();
+            }
+            modal.closeAll();
+        }
+    });
 });

@@ -1,4 +1,4 @@
- /* ============================================================
+  /* ============================================================
    STUDYVAULT  v3.0  —  Firebase Edition
    ============================================================
    SETUP INSTRUCTIONS
@@ -161,6 +161,18 @@ class FolderStructure {
         });
         return r;
     }
+    getCloudinaryBytes() {
+        return this.getAllNotes().reduce((acc, n) => {
+            const b = n.sizeBytes || this.parseSizeBytes(n.size) || 0;
+            return acc + (n.fileKind === 'pdf' ? b : 0);
+        }, 0);
+    }
+    getFirestoreBytes() {
+        return this.getAllNotes().reduce((acc, n) => {
+            const b = n.sizeBytes || this.parseSizeBytes(n.size) || 0;
+            return acc + (n.fileKind === 'pdf' ? 0 : b);
+        }, 0);
+    }
     getNotesSortedBySize() {
         return this.getAllNotes()
             .map(n=>({...n, _bytes: n.sizeBytes||this.parseSizeBytes(n.size)||0}))
@@ -214,11 +226,6 @@ class FolderStructure {
         for(const sub of node.subFolders){ const r=this.findFolderParentId(folderId,sub); if(r) return r; }
         return null;
     }
-    findFolderParentId(folderId, node=this.root) {
-        if(node.subFolders.find(f=>f.id===folderId)) return node.id;
-        for(const sub of node.subFolders){ const r=this.findFolderParentId(folderId,sub); if(r) return r; }
-        return null;
-    }
     clearAll() { this.root = this._emptyRoot(); }
 }
 
@@ -230,6 +237,16 @@ let currentFolderId = 'root';
 let currentView   = 'library';  // 'library' | 'recent' | 'pinned' | 'archive'
 let selectMode    = false;
 let selectedNotes = new Set();
+let globalUsage = {
+    cloudinaryBytes: 0,
+    firestoreBytes: 0,
+    available: false,
+    source: 'none',
+    reason: 'Sign in to view shared quota',
+    updatedAt: null
+};
+let globalUsagePromise = null;
+let globalUsageUnsubscribe = null;
 
 // ── HELPERS ───────────────────────────────────────────────────
 
@@ -240,6 +257,140 @@ function fmtSize(b) {
     if(!b) return '0 B';
     const u=['B','KB','MB','GB'], i=Math.floor(Math.log(b)/Math.log(1024));
     return `${(b/Math.pow(1024,i)).toFixed(1)} ${u[i]}`;
+}
+function parseSizeBytesLoose(sizeStr) {
+    if(!sizeStr) return 0;
+    const m = String(sizeStr).match(/([\d.]+)\s*(B|KB|MB|GB)/i);
+    if(!m) return 0;
+    const val = parseFloat(m[1]);
+    const unit = m[2].toUpperCase();
+    const mul = {'B':1,'KB':1024,'MB':1048576,'GB':1073741824}[unit] || 1;
+    return Math.round(val * mul);
+}
+function readNoteBytes(note) {
+    return (note && (note.sizeBytes || parseSizeBytesLoose(note.size))) || 0;
+}
+function collectUsageFromTreeNode(node, acc) {
+    if(!node) return;
+    (node.notes || []).forEach(note => {
+        const b = readNoteBytes(note);
+        if(note.fileKind === 'pdf') acc.cloudinaryBytes += b;
+        else acc.firestoreBytes += b;
+    });
+    (node.subFolders || []).forEach(sub => collectUsageFromTreeNode(sub, acc));
+}
+function setGlobalUsageUnavailable(reason) {
+    globalUsage = {
+        cloudinaryBytes: 0,
+        firestoreBytes: 0,
+        available: false,
+        source: 'none',
+        reason,
+        updatedAt: Date.now()
+    };
+}
+function stopGlobalUsageLiveListener() {
+    if(typeof globalUsageUnsubscribe === 'function') {
+        globalUsageUnsubscribe();
+        globalUsageUnsubscribe = null;
+    }
+}
+function startGlobalUsageLiveListener() {
+    stopGlobalUsageLiveListener();
+    if(!currentUser) return;
+
+    try {
+        globalUsageUnsubscribe = firestore.collection('appMeta').doc('globalUsage')
+            .onSnapshot(doc => {
+                if(doc.exists) {
+                    const d = doc.data() || {};
+                    if(typeof d.cloudinaryBytes === 'number' && typeof d.firestoreBytes === 'number') {
+                        globalUsage = {
+                            cloudinaryBytes: Math.max(0, d.cloudinaryBytes),
+                            firestoreBytes: Math.max(0, d.firestoreBytes),
+                            available: true,
+                            source: 'shared-doc-live',
+                            reason: '',
+                            updatedAt: Date.now()
+                        };
+                        renderAll();
+                        return;
+                    }
+                }
+                // If shared doc is missing or malformed, fall back to manual refresh strategy.
+                refreshGlobalUsage(true).catch(()=>{});
+            },
+            err => {
+                console.warn('Shared usage live listener failed:', err);
+                stopGlobalUsageLiveListener();
+                setGlobalUsageUnavailable('Shared quota unavailable due Firestore read rules');
+                renderAll();
+            });
+    } catch(err) {
+        console.warn('Could not attach shared usage listener:', err);
+        setGlobalUsageUnavailable('Shared quota unavailable due Firestore read rules');
+    }
+}
+async function refreshGlobalUsage(force=false) {
+    if(!currentUser) {
+        setGlobalUsageUnavailable('Sign in to view shared quota');
+        return;
+    }
+    if(globalUsagePromise && !force) return globalUsagePromise;
+
+    globalUsagePromise = (async () => {
+        // Preferred: an explicit shared usage document if your rules allow it.
+        try {
+            const shared = await firestore.collection('appMeta').doc('globalUsage').get();
+            if(shared.exists) {
+                const d = shared.data() || {};
+                if(typeof d.cloudinaryBytes === 'number' && typeof d.firestoreBytes === 'number') {
+                    globalUsage = {
+                        cloudinaryBytes: Math.max(0, d.cloudinaryBytes),
+                        firestoreBytes: Math.max(0, d.firestoreBytes),
+                        available: true,
+                        source: 'shared-doc',
+                        reason: '',
+                        updatedAt: Date.now()
+                    };
+                    return;
+                }
+            }
+        } catch(_) {}
+
+        // Fallback: attempt client-side scan across all users (requires permissive rules).
+        try {
+            const usersSnap = await firestore.collection('users').get();
+            const acc = { cloudinaryBytes: 0, firestoreBytes: 0 };
+            await Promise.all(usersSnap.docs.map(async userDoc => {
+                const treeDoc = await firestore.collection('users').doc(userDoc.id)
+                    .collection('vault').doc('tree').get();
+                if(!treeDoc.exists) return;
+                const treeRaw = (treeDoc.data() || {}).tree;
+                if(!treeRaw) return;
+                const tree = JSON.parse(treeRaw);
+                collectUsageFromTreeNode(tree, acc);
+            }));
+            globalUsage = {
+                cloudinaryBytes: acc.cloudinaryBytes,
+                firestoreBytes: acc.firestoreBytes,
+                available: true,
+                source: 'scanned-users',
+                reason: '',
+                updatedAt: Date.now()
+            };
+        } catch(err) {
+            console.warn('Shared usage unavailable:', err);
+            setGlobalUsageUnavailable('Shared quota unavailable due Firestore read rules');
+        }
+    })();
+
+    try {
+        await globalUsagePromise;
+    } finally {
+        globalUsagePromise = null;
+        renderAll();
+    }
 }
 
 // ── SYNC INDICATOR ────────────────────────────────────────────
@@ -256,6 +407,7 @@ async function saveAndRender() {
     if(currentUser) await db.saveToCloud(currentUser.uid);
     else db._saveCache(); // guest: local only
     renderAll();
+    if(currentUser && !globalUsageUnsubscribe) refreshGlobalUsage(true).catch(()=>{});
 }
 
 // ── TOAST ─────────────────────────────────────────────────────
@@ -313,6 +465,7 @@ function setUserBadge(user) {
 auth.onAuthStateChanged(async user => {
     if (user) {
         currentUser = user;
+        startGlobalUsageLiveListener();
         setUserBadge(user);
         if (db._loadCache()) renderAll();
         showApp();
@@ -327,10 +480,13 @@ auth.onAuthStateChanged(async user => {
             showToast('Cloud sync failed — showing local data', 'info');
         }
         renderAll();
+        refreshGlobalUsage(true).catch(()=>{});
     } else {
+        stopGlobalUsageLiveListener();
         // Check if user chose guest mode
         if(localStorage.getItem('studyVaultGuest') === 'true') {
             currentUser = null;
+            setGlobalUsageUnavailable('Guest mode has no shared cloud quota view');
             setUserBadge(null);
             db._loadCache();
             showApp();
@@ -338,6 +494,7 @@ auth.onAuthStateChanged(async user => {
             renderAll();
         } else {
             currentUser = null;
+            setGlobalUsageUnavailable('Sign in to view shared quota');
             showLogin();
         }
     }
@@ -590,7 +747,9 @@ function attachGridListeners() {
             e.stopPropagation();
             const note=db.findNoteById(btn.dataset.noteId); if(!note) return;
             if(!confirm(`Delete "${note.name}"?\nThis cannot be undone.`)) return;
-            const deleted=db.deleteNote(note.id,currentFolderId);
+            const folderId = db.findNoteParentId(note.id);
+            if(!folderId) return;
+            db.deleteNote(note.id, folderId);
             // Note: Cloudinary files remain in cloud (no delete API on free plan from browser)
             showToast(`"${note.name}" deleted`);
             selectedNotes.delete(note.id);
@@ -656,10 +815,22 @@ const FIRESTORE_LIMIT  =  1 * 1024 * 1024 * 1024; // 1 GB free
 function renderStorageView() {
     const grid = document.getElementById('folderGrid');
     const totalBytes = db.getTotalBytes();
+    const cloudinaryBytes = db.getCloudinaryBytes();
+    const firestoreBytes = db.getFirestoreBytes();
+    const sharedCloudinaryBytes = globalUsage.available ? globalUsage.cloudinaryBytes : null;
+    const sharedFirestoreBytes = globalUsage.available ? globalUsage.firestoreBytes : null;
     const byType = db.getStorageByType();
     const allNotes = db.getNotesSortedBySize();
-    const pct = Math.min((totalBytes / CLOUDINARY_LIMIT) * 100, 100);
-    const pctStr = pct < 0.01 ? '<0.01' : pct.toFixed(2);
+    const cloudinaryPct = Math.min((cloudinaryBytes / CLOUDINARY_LIMIT) * 100, 100);
+    const firestorePct = Math.min((firestoreBytes / FIRESTORE_LIMIT) * 100, 100);
+    const cloudinaryPctStr = cloudinaryPct < 0.01 ? '<0.01' : cloudinaryPct.toFixed(2);
+    const firestorePctStr = firestorePct < 0.01 ? '<0.01' : firestorePct.toFixed(2);
+    const sharedCloudinaryPct = globalUsage.available ? Math.min((sharedCloudinaryBytes / CLOUDINARY_LIMIT) * 100, 100) : 0;
+    const sharedFirestorePct = globalUsage.available ? Math.min((sharedFirestoreBytes / FIRESTORE_LIMIT) * 100, 100) : 0;
+    const sharedCloudinaryLeft = globalUsage.available ? Math.max(0, CLOUDINARY_LIMIT - sharedCloudinaryBytes) : null;
+    const sharedFirestoreLeft = globalUsage.available ? Math.max(0, FIRESTORE_LIMIT - sharedFirestoreBytes) : null;
+    const sharedCloudinaryPctStr = sharedCloudinaryPct < 0.01 ? '<0.01' : sharedCloudinaryPct.toFixed(2);
+    const sharedFirestorePctStr = sharedFirestorePct < 0.01 ? '<0.01' : sharedFirestorePct.toFixed(2);
 
     // Type breakdown rows
     const typeData = [
@@ -701,8 +872,9 @@ function renderStorageView() {
 
     // Status badge
     let statusClass = 'sv-status--safe', statusText = 'Plenty of space available';
-    if(pct > 80) { statusClass='sv-status--warn'; statusText='Storage getting full'; }
-    if(pct > 95) { statusClass='sv-status--danger'; statusText='Almost full — consider deleting files'; }
+    const maxPct = Math.max(cloudinaryPct, firestorePct);
+    if(maxPct > 80) { statusClass='sv-status--warn'; statusText='Storage getting full'; }
+    if(maxPct > 95) { statusClass='sv-status--danger'; statusText='Almost full — consider deleting files'; }
 
     grid.innerHTML = `
     <div class="storage-view">
@@ -710,9 +882,14 @@ function renderStorageView() {
         <!-- Hero card: total usage -->
         <div class="sv-hero-card">
             <div class="sv-hero-left">
-                <p class="sv-hero-label">TOTAL STORAGE USED</p>
+                <p class="sv-hero-label">CLOUD STORAGE OVERVIEW</p>
                 <p class="sv-hero-value">${fmtSize(totalBytes)}</p>
-                <p class="sv-hero-sub">of 25 GB free (Cloudinary) · ${pctStr}% used</p>
+                <p class="sv-hero-sub">Cloudinary: ${fmtSize(cloudinaryBytes)} / ${fmtSize(CLOUDINARY_LIMIT)} (${cloudinaryPctStr}%)</p>
+                <p class="sv-hero-sub">Firebase: ${fmtSize(firestoreBytes)} / ${fmtSize(FIRESTORE_LIMIT)} (${firestorePctStr}%)</p>
+                ${globalUsage.available
+                    ? `<p class="sv-hero-sub">Shared left: Cloudinary ${fmtSize(sharedCloudinaryLeft)} · Firebase ${fmtSize(sharedFirestoreLeft)}</p>`
+                    : `<p class="sv-hero-sub">Shared quota: unavailable (${esc(globalUsage.reason || 'missing permissions')})</p>`
+                }
                 <span class="sv-status ${statusClass}">${statusText}</span>
             </div>
             <div class="sv-hero-right">
@@ -720,7 +897,7 @@ function renderStorageView() {
                     <svg width="120" height="120" viewBox="0 0 120 120">
                         <circle cx="60" cy="60" r="48" fill="none" stroke="var(--surface-hi)" stroke-width="14"/>
                         <circle cx="60" cy="60" r="48" fill="none" stroke="url(#sg)" stroke-width="14"
-                            stroke-dasharray="${(pct/100*301.6).toFixed(1)} 301.6"
+                            stroke-dasharray="${(cloudinaryPct/100*301.6).toFixed(1)} 301.6"
                             stroke-dashoffset="75.4" stroke-linecap="round"/>
                         <defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1">
                             <stop offset="0%" stop-color="var(--gold)"/>
@@ -728,8 +905,8 @@ function renderStorageView() {
                         </linearGradient></defs>
                     </svg>
                     <div class="sv-donut-center">
-                        <span class="sv-donut-pct">${pctStr}%</span>
-                        <span class="sv-donut-label">used</span>
+                        <span class="sv-donut-pct">${cloudinaryPctStr}%</span>
+                        <span class="sv-donut-label">Cloudinary</span>
                     </div>
                 </div>
             </div>
@@ -758,7 +935,8 @@ function renderStorageView() {
                             <div class="sv-perk-icon sv-perk-icon--pdf">☁️</div>
                             <div class="sv-perk-info">
                                 <p class="sv-perk-name">Cloudinary (PDF Storage)</p>
-                                <p class="sv-perk-val">25 GB storage · 25 GB bandwidth/month</p>
+                                <p class="sv-perk-val">${fmtSize(cloudinaryBytes)} used of ${fmtSize(CLOUDINARY_LIMIT)} · 25 GB bandwidth/month</p>
+                                ${globalUsage.available ? `<p class="sv-perk-val">Shared project: ${fmtSize(sharedCloudinaryBytes)} used (${sharedCloudinaryPctStr}%)</p>` : ''}
                             </div>
                             <span class="sv-perk-badge sv-perk-badge--free">FREE</span>
                         </div>
@@ -766,7 +944,8 @@ function renderStorageView() {
                             <div class="sv-perk-icon sv-perk-icon--db">🔥</div>
                             <div class="sv-perk-info">
                                 <p class="sv-perk-name">Firestore (Notes &amp; Data)</p>
-                                <p class="sv-perk-val">1 GB storage · 50K reads/day · 20K writes/day</p>
+                                <p class="sv-perk-val">${fmtSize(firestoreBytes)} used of ${fmtSize(FIRESTORE_LIMIT)} · 50K reads/day · 20K writes/day</p>
+                                ${globalUsage.available ? `<p class="sv-perk-val">Shared project: ${fmtSize(sharedFirestoreBytes)} used (${sharedFirestorePctStr}%)</p>` : ''}
                             </div>
                             <span class="sv-perk-badge sv-perk-badge--free">FREE</span>
                         </div>
@@ -782,7 +961,7 @@ function renderStorageView() {
                             <div class="sv-perk-icon sv-perk-icon--total">⭐</div>
                             <div class="sv-perk-info">
                                 <p class="sv-perk-name">Your Vault Total</p>
-                                <p class="sv-perk-val">${allNotes.length} file${allNotes.length!==1?'s':''} · ${fmtSize(totalBytes)} used · ${fmtSize(CLOUDINARY_LIMIT - totalBytes)} remaining</p>
+                                <p class="sv-perk-val">${allNotes.length} file${allNotes.length!==1?'s':''} · ${fmtSize(totalBytes)} total across cloud providers</p>
                             </div>
                         </div>
                     </div>
@@ -821,14 +1000,22 @@ function updateSidebarStorage() {
     const bar  = document.getElementById('sbStorageBarFill');
     const info = document.getElementById('sbStorageInfo');
     if(!bar || !info) return;
-    const total = db.getTotalBytes();
-    const pct = Math.min((total / CLOUDINARY_LIMIT) * 100, 100);
+    const cloudinaryBytes = db.getCloudinaryBytes();
+    const firestoreBytes = db.getFirestoreBytes();
+    const cloudinaryPct = Math.min((cloudinaryBytes / CLOUDINARY_LIMIT) * 100, 100);
+    const firestorePct = Math.min((firestoreBytes / FIRESTORE_LIMIT) * 100, 100);
+    const pct = Math.max(cloudinaryPct, firestorePct);
     bar.style.width = pct.toFixed(2) + '%';
     // Colour: green → amber → red
     if(pct > 80) bar.style.background = 'var(--red)';
     else if(pct > 50) bar.style.background = 'linear-gradient(90deg,var(--gold),var(--gold-mid))';
     else bar.style.background = 'var(--gold-grad)';
-    info.textContent = `${fmtSize(total)} of 25 GB used`;
+    const mine = `You C ${fmtSize(cloudinaryBytes)} · F ${fmtSize(firestoreBytes)}`;
+    if(globalUsage.available) {
+        info.textContent = `${mine} · All C ${fmtSize(globalUsage.cloudinaryBytes)} · F ${fmtSize(globalUsage.firestoreBytes)}`;
+    } else {
+        info.textContent = mine;
+    }
 }
 
 
@@ -839,6 +1026,7 @@ function updateViewHeader(title, sub) {
 
 function setView(view) {
     currentView = view;
+    if(view === 'storage') refreshGlobalUsage().catch(()=>{});
     // Update sidebar active state
     document.querySelectorAll('.sb-nav-item').forEach(a => {
         a.classList.remove('sb-nav-item--active');
@@ -1005,6 +1193,7 @@ const uploader = {
 
     async upload() {
         if(!this.files.length){ showToast('No files selected','error'); return; }
+        const uploadFolderId = currentFolderId;
         const total=this.files.length; let done=0, errs=0;
         const advance=(ok=true)=>{ if(!ok) errs++; done++; this.setProgress(Math.round(done/total*100),`Uploading ${done} of ${total}…`); if(done<total) return; this.setProgress(100,''); const msg=errs?`${total-errs} uploaded, ${errs} failed`:`${total} file${total!==1?'s':''} uploaded`; showToast(msg,errs?'info':'success'); this.files=[]; this.renderList(); saveAndRender(); modal.close('uploadNotesModal'); };
         this.setProgress(1,`Uploading 0 of ${total}…`);
@@ -1013,7 +1202,7 @@ const uploader = {
             const size=fmtSize(file.size), sizeB=file.size, kind=this.classify(file);
 
             if(kind==='pdf') {
-                const note=db.addNote(currentFolderId,file.name,size,'pdf','application/pdf',sizeB);
+                const note=db.addNote(uploadFolderId,file.name,size,'pdf','application/pdf',sizeB);
                 if(!note){ advance(false); continue; }
                 try {
                     const formData = new FormData();
@@ -1031,29 +1220,29 @@ const uploader = {
                     note.storageRef = publicUrl;
                     note.cloudinaryId = data.public_id;
                     advance();
-                } catch(err){ console.error('PDF upload error:',err); showToast(`Failed: "${file.name}"`,'error'); db.deleteNote(note.id,currentFolderId); advance(false); }
+                } catch(err){ console.error('PDF upload error:',err); showToast(`Failed: "${file.name}"`,'error'); db.deleteNote(note.id,uploadFolderId); advance(false); }
                 continue;
             }
 
             if(kind==='docx') {
-                if(typeof mammoth==='undefined'){ showToast('mammoth.js not loaded','error'); db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); continue; }
+                if(typeof mammoth==='undefined'){ showToast('mammoth.js not loaded','error'); db.addNote(uploadFolderId,file.name,size,'binary',file.type,sizeB); advance(false); continue; }
                 try {
                     const buf=await file.arrayBuffer(), result=await mammoth.convertToHtml({arrayBuffer:buf});
-                    const note=db.addNote(currentFolderId,file.name,size,'docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',sizeB);
+                    const note=db.addNote(uploadFolderId,file.name,size,'docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',sizeB);
                     if(note) note.content=result.value; advance();
-                } catch(err){ console.error('DOCX error:',err); showToast(`Could not convert "${file.name}"`,'error'); db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); }
+                } catch(err){ console.error('DOCX error:',err); showToast(`Could not convert "${file.name}"`,'error'); db.addNote(uploadFolderId,file.name,size,'binary',file.type,sizeB); advance(false); }
                 continue;
             }
 
-            if(kind==='doc'){ showToast(`"${file.name}" is old .doc format — stored as reference`,'info'); db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); continue; }
+            if(kind==='doc'){ showToast(`"${file.name}" is old .doc format — stored as reference`,'info'); db.addNote(uploadFolderId,file.name,size,'binary',file.type,sizeB); advance(false); continue; }
 
             if(kind==='text') {
-                try { const text=await file.text(); const note=db.addNote(currentFolderId,file.name,size,'text',file.type||'text/plain',sizeB); if(note) note.content=text; advance(); }
-                catch(err){ db.addNote(currentFolderId,file.name,size,'binary',file.type); advance(false); }
+                try { const text=await file.text(); const note=db.addNote(uploadFolderId,file.name,size,'text',file.type||'text/plain',sizeB); if(note) note.content=text; advance(); }
+                catch(err){ db.addNote(uploadFolderId,file.name,size,'binary',file.type,sizeB); advance(false); }
                 continue;
             }
 
-            db.addNote(currentFolderId,file.name,size,'binary',file.type); advance();
+            db.addNote(uploadFolderId,file.name,size,'binary',file.type,sizeB); advance();
         }
     }
 };
@@ -1313,7 +1502,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('bulkDeleteBtn').addEventListener('click', async ()=>{
         const count=selectedNotes.size;
         if(!count||!confirm(`Delete ${count} file${count!==1?'s':''}?\nThis cannot be undone.`)) return;
-        for(const id of selectedNotes){ db.deleteNote(id,currentFolderId); }
+        for(const id of selectedNotes){
+            const folderId = db.findNoteParentId(id);
+            if(folderId) db.deleteNote(id, folderId);
+        }
         showToast(`${count} file${count!==1?'s':''} deleted`); exitSelectMode(); saveAndRender();
     });
 

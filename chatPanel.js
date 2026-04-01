@@ -1,4 +1,4 @@
-/* ============================================================
+ /* ============================================================
    STUDYVAULT — AI Chat Panel  (chatPanel.js)
    ============================================================
    Injects the "Ask AI" button onto every file card and manages
@@ -113,7 +113,8 @@
             text-overflow: ellipsis;
             max-width: 280px;
         }
-        #sv-ai-close-btn {
+        #sv-ai-header-right { display: flex; align-items: center; gap: 8px; }
+        .sv-icon-btn {
             background: none;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 7px;
@@ -124,7 +125,80 @@
             flex-shrink: 0;
             transition: background 0.15s, color 0.15s;
         }
-        #sv-ai-close-btn:hover { background: rgba(255,255,255,0.06); color: #e8dfc4; }
+        .sv-icon-btn:hover { background: rgba(255,255,255,0.06); color: #e8dfc4; }
+
+        /* ── History View ───────────────────────────────────── */
+        #sv-ai-history-view {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #sv-ai-history-view::-webkit-scrollbar { width: 4px; }
+        #sv-ai-history-view::-webkit-scrollbar-track { background: transparent; }
+        #sv-ai-history-view::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.2); border-radius: 4px; }
+        
+        .sv-history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .sv-history-item:hover {
+            background: rgba(201,168,76,0.08);
+            border-color: rgba(201,168,76,0.25);
+        }
+        .sv-history-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow: hidden;
+        }
+        .sv-history-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-primary, #e8dfc4);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sv-history-meta {
+            font-size: 11px;
+            color: rgba(138,122,90,0.7);
+        }
+        .sv-history-delete {
+            opacity: 0;
+            background: none;
+            border: none;
+            color: rgba(220,50,50,0.8);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        .sv-history-item:hover .sv-history-delete { opacity: 1; }
+        .sv-history-delete:hover { background: rgba(220,50,50,0.15); }
+        .sv-history-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(138,122,90,0.7);
+            font-size: 13px;
+        }
+        
+        [data-theme="light"] .sv-history-item {
+            background: #fff;
+            border-color: rgba(117,91,0,0.15);
+        }
+        [data-theme="light"] .sv-history-item:hover {
+            background: rgba(201,168,76,0.1);
+        }
 
         /* ── Messages Area ──────────────────────────────────── */
         #sv-ai-messages {
@@ -369,13 +443,17 @@
                     <div id="sv-ai-filename">Select a file</div>
                 </div>
             </div>
-            <button id="sv-ai-close-btn" aria-label="Close AI panel" title="Close">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-            </button>
+            <div id="sv-ai-header-right">
+                <button id="sv-ai-history-btn" class="sv-icon-btn" aria-label="Chat History" title="View Chat History">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </button>
+                <button id="sv-ai-close-btn" class="sv-icon-btn" aria-label="Close AI panel" title="Close">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
         </div>
 
+        <div id="sv-ai-history-view" style="display: none;"></div>
         <div id="sv-ai-messages"></div>
 
         <div id="sv-ai-footer">
@@ -411,8 +489,10 @@
         document.body.appendChild(panel);
         document.body.appendChild(fab);
 
-        // Wire up close button
         document.getElementById('sv-ai-close-btn').addEventListener('click', closePanel);
+
+        // Wire up history button
+        document.getElementById('sv-ai-history-btn').addEventListener('click', toggleHistoryView);
 
         // Wire up send button
         document.getElementById('sv-ai-send-btn').addEventListener('click', handleSend);
@@ -461,6 +541,13 @@
         // Clear messages and show panel
         const messagesEl = document.getElementById('sv-ai-messages');
         messagesEl.innerHTML = '';
+        messagesEl.style.display = 'flex';
+        
+        const ftr = document.getElementById('sv-ai-footer');
+        if (ftr) ftr.style.display = 'block';
+        
+        const histView = document.getElementById('sv-ai-history-view');
+        if (histView) histView.style.display = 'none';
 
         document.getElementById('sv-ai-backdrop').classList.add('open');
         document.getElementById('sv-ai-panel').classList.add('open');
@@ -683,7 +770,15 @@
     // Silently skips if user is not signed in (guest mode)
     async function saveChatHistory(noteId, noteName, history) {
         try {
-            if (typeof currentUser === 'undefined' || !currentUser || !currentUser.uid) return;
+            if (typeof currentUser === 'undefined' || !currentUser || !currentUser.uid) {
+                const key = 'sv_ai_chat_' + noteId;
+                localStorage.setItem(key, JSON.stringify({
+                    noteId,
+                    noteName: noteName || '',
+                    messages: history.slice(-60)
+                }));
+                return;
+            }
             if (typeof firestore === 'undefined') return;
 
             await firestore
@@ -704,7 +799,17 @@
     // Returns null if no history found or user is not signed in
     async function loadChatHistory(noteId) {
         try {
-            if (typeof currentUser === 'undefined' || !currentUser || !currentUser.uid) return null;
+            if (typeof currentUser === 'undefined' || !currentUser || !currentUser.uid) {
+                const key = 'sv_ai_chat_' + noteId;
+                const data = localStorage.getItem(key);
+                if (data) {
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed && parsed.messages) return parsed;
+                    } catch(e) {}
+                }
+                return null;
+            }
             if (typeof firestore === 'undefined') return null;
 
             const doc = await firestore
@@ -717,6 +822,180 @@
             console.warn('StudyVault AI: Could not load chat history —', err.message);
         }
         return null;
+    }
+
+    // ── CHAT HISTORY VIEW LOGIC ───────────────────────────────
+
+    async function getAllChatHistory() {
+        let chats = [];
+        
+        // Local storage first
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('sv_ai_chat_')) {
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.messages) chats.push(data);
+                } catch(e) {}
+            }
+        }
+        
+        // Firestore if logged in
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.uid && typeof firestore !== 'undefined') {
+            try {
+                const snap = await firestore
+                    .collection('users').doc(currentUser.uid)
+                    .collection('aiChats')
+                    .get();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    chats = chats.filter(c => c.noteId !== data.noteId); // dedupe
+                    chats.push(data);
+                });
+            } catch (err) {
+                console.warn('StudyVault AI: Could not list cloud chats', err);
+            }
+        }
+
+        // Sort: Global chat first, then by timestamp descending, then by length
+        chats.sort((a, b) => {
+            if (a.noteId === 'global_chat') return -1;
+            if (b.noteId === 'global_chat') return 1;
+            
+            const aTime = a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0;
+            const bTime = b.updatedAt && b.updatedAt.toMillis ? b.updatedAt.toMillis() : 0;
+            if (aTime !== bTime) return bTime - aTime;
+            
+            const aLen = Array.isArray(a.messages) ? a.messages.length : 0;
+            const bLen = Array.isArray(b.messages) ? b.messages.length : 0;
+            return bLen - aLen;
+        });
+
+        return chats;
+    }
+
+    async function deleteChatHistory(noteId) {
+        localStorage.removeItem('sv_ai_chat_' + noteId);
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.uid && typeof firestore !== 'undefined') {
+            try {
+                await firestore
+                    .collection('users').doc(currentUser.uid)
+                    .collection('aiChats').doc(noteId)
+                    .delete();
+            } catch(e) {}
+        }
+    }
+
+    async function toggleHistoryView() {
+        if (isBusy) return;
+        const msgView = document.getElementById('sv-ai-messages');
+        const ftrView = document.getElementById('sv-ai-footer');
+        const histView = document.getElementById('sv-ai-history-view');
+        
+        if (!histView) return;
+
+        if (histView.style.display === 'flex') {
+            // Switch back to chat
+            histView.style.display = 'none';
+            if (msgView) msgView.style.display = 'flex';
+            if (ftrView) ftrView.style.display = 'block';
+            scrollToBottom();
+            
+            const filenameEl = document.getElementById('sv-ai-filename');
+            if (filenameEl) {
+                if (activeNote) filenameEl.textContent = activeNote.name || 'Untitled';
+                else filenameEl.textContent = 'Global Vault Assistant';
+            }
+        } else {
+            // Switch to history
+            if (msgView) msgView.style.display = 'none';
+            if (ftrView) ftrView.style.display = 'none';
+            histView.style.display = 'flex';
+            histView.innerHTML = '<div class="sv-history-empty">Loading history...</div>';
+            
+            const filenameEl = document.getElementById('sv-ai-filename');
+            if (filenameEl) filenameEl.textContent = 'Chat History';
+            
+            const chats = await getAllChatHistory();
+            renderHistoryList(chats);
+        }
+    }
+
+    function renderHistoryList(chats) {
+        const histView = document.getElementById('sv-ai-history-view');
+        histView.innerHTML = '';
+        
+        if (chats.length === 0) {
+            histView.innerHTML = '<div class="sv-history-empty">No previous chats found.</div>';
+            return;
+        }
+
+        chats.forEach(chat => {
+            const item = document.createElement('div');
+            item.className = 'sv-history-item';
+            
+            const info = document.createElement('div');
+            info.className = 'sv-history-info';
+            
+            const title = document.createElement('div');
+            title.className = 'sv-history-title';
+            title.textContent = chat.noteName || (chat.noteId === 'global_chat' ? 'Global Vault Assistant' : 'Untitled File');
+            
+            const meta = document.createElement('div');
+            meta.className = 'sv-history-meta';
+            const msgCount = Array.isArray(chat.messages) ? chat.messages.length : 0;
+            meta.textContent = msgCount + ' message' + (msgCount === 1 ? '' : 's');
+            
+            info.appendChild(title);
+            info.appendChild(meta);
+            
+            const delBtn = document.createElement('button');
+            delBtn.className = 'sv-history-delete';
+            delBtn.title = 'Delete Chat';
+            delBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+            
+            delBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (confirm('Delete this chat history for good?')) {
+                    await deleteChatHistory(chat.noteId);
+                    item.remove();
+                    
+                    // If we just deleted the active session, clear its local memory
+                    if ((activeNote && activeNote.id === chat.noteId) || (!activeNote && chat.noteId === 'global_chat')) {
+                        chatHistory = [];
+                        const msgView = document.getElementById('sv-ai-messages');
+                        if (msgView) msgView.innerHTML = '';
+                    }
+
+                    if (histView.children.length === 0) {
+                        histView.innerHTML = '<div class="sv-history-empty">No previous chats found.</div>';
+                    }
+                }
+            });
+            
+            item.appendChild(info);
+            item.appendChild(delBtn);
+            
+            // Resume Chat
+            item.addEventListener('click', () => {
+                if (chat.noteId === 'global_chat') {
+                    openPanel(null);
+                } else {
+                    if (typeof db !== 'undefined') {
+                        const note = db.findNoteById(chat.noteId);
+                        if (note) {
+                            openPanel(note);
+                        } else {
+                            alert('This file appears to have been deleted from your library.');
+                        }
+                    } else {
+                        alert('Could not open file (database not loaded).');
+                    }
+                }
+            });
+            
+            histView.appendChild(item);
+        });
     }
 
     // ── ASK AI BUTTON INJECTION ───────────────────────────────

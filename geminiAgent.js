@@ -6,10 +6,43 @@
    No credit card needed. 500 requests/day on free tier.
    ============================================================ */
 
-const GEMINI_API_KEY = 'AIzaSyDRO0m18XeFDLOZUiAFFD00la-FJ8ASI60';
+// ── GEMINI API KEY LOGIC ──────────────────────────────────────
+function getGeminiKey() {
+    let key = localStorage.getItem('sv_gemini_api_key');
+    if (!key) {
+        key = prompt('Please enter your Gemini API Key to use the AI features:\n(Get a free key at https://aistudio.google.com)');
+        if (key && key.trim()) {
+            localStorage.setItem('sv_gemini_api_key', key.trim());
+        } else {
+            throw new Error('API key missing. Please provide a Gemini API Key to use StudyVault AI.');
+        }
+    }
+    return key.trim();
+}
 
-const GEMINI_URL =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+function promptForGeminiKey() {
+    const existing = localStorage.getItem('sv_gemini_api_key') || '';
+    const newKey = prompt('Enter your Gemini API Key:', existing);
+    if (newKey !== null && newKey.trim() !== '') {
+        localStorage.setItem('sv_gemini_api_key', newKey.trim());
+        alert('Gemini API Key saved successfully!');
+    } else if (newKey === '') {
+        localStorage.removeItem('sv_gemini_api_key');
+        alert('Gemini API Key removed.');
+    }
+}
+
+// Attach event listener for the new API KEY button in index.html
+document.addEventListener('DOMContentLoaded', () => {
+    const setApiKeyBtn = document.getElementById('setApiKeyBtn');
+    if (setApiKeyBtn) {
+        setApiKeyBtn.addEventListener('click', promptForGeminiKey);
+    }
+});
+
+function getGeminiUrl() {
+    return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getGeminiKey()}`;
+}
 
 // In-memory caches so we don't re-extract or re-summarise the same file twice
 const _contentCache = new Map(); // noteId → plain text string
@@ -89,13 +122,7 @@ async function extractNoteText(note) {
 
 // Sends a request to the Gemini REST API and returns the response text.
 async function _callGemini(systemPrompt, contents) {
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_GEMINI_API_KEY_HERE') {
-        throw new Error(
-            'API key missing. Open geminiAgent.js and paste your Gemini key at the top of the file.'
-        );
-    }
-
-    const res = await fetch(GEMINI_URL, {
+    const res = await fetch(getGeminiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -218,10 +245,6 @@ async function _handleFunctionCall(fc) {
 }
 
 async function _callGeminiWithTools(systemPrompt, userContents, statusCallback) {
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_GEMINI_API_KEY_HERE') {
-        throw new Error('API key missing. Paste your Gemini key at the top of geminiAgent.js.');
-    }
-
     let contents = [...userContents];
 
     // Loop up to 10 times to resolve function calls
@@ -233,7 +256,7 @@ async function _callGeminiWithTools(systemPrompt, userContents, statusCallback) 
             generationConfig: { maxOutputTokens: 2048, temperature: 0.3 }
         };
 
-        const res = await fetch(GEMINI_URL, {
+        const res = await fetch(getGeminiUrl(), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)

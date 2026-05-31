@@ -99,16 +99,28 @@ async function extractNoteText(note) {
         const blob = await res.blob();
         text = await _extractPdfText(blob);
 
-    } else if (note.fileKind === 'docx' && note.content) {
-        // Docx stored as HTML → strip tags for plain text
-        text = _stripHtml(note.content);
-
-    } else if (note.content) {
-        // TXT / MD / JSON / code files stored as plain text
-        text = String(note.content);
+    } else if (note.fileKind === 'docx') {
+        // Lazy-load content from Firestore if not in-memory
+        if (note.content == null && typeof ensureNoteContent === 'function') {
+            await ensureNoteContent(note);
+        }
+        if (note.content) {
+            // Docx stored as HTML → strip tags for plain text
+            text = _stripHtml(note.content);
+        } else {
+            throw new Error('This file has no readable content. It may not have uploaded correctly.');
+        }
 
     } else {
-        throw new Error('This file has no readable content. It may not have uploaded correctly.');
+        // TXT / MD / JSON / code files — lazy-load if needed
+        if (note.content == null && typeof ensureNoteContent === 'function') {
+            await ensureNoteContent(note);
+        }
+        if (note.content) {
+            text = String(note.content);
+        } else {
+            throw new Error('This file has no readable content. It may not have uploaded correctly.');
+        }
     }
 
     const trimmed = text.trim().slice(0, 100000); // cap at ~100k chars to stay within limits

@@ -23,11 +23,13 @@
    ============================================================
    HOW DATA IS STORED
    • Firestore  users/{uid}/vault/tree
-       Full folder tree as JSON (text + DOCX HTML content).
+       Folder tree as JSON (metadata only — no file content).
+   • Firestore  users/{uid}/vault/notes/items/{noteId}
+       Each DOCX/TXT file's content in its own document (≤1 MB each).
    • Cloudinary (PDF storage)
        Raw PDF binary files uploaded via unsigned preset.
-   • localStorage  studyVaultCache
-       Local cache — makes the app feel instant on reload.
+   • localStorage  sv_cache_{uid}
+       Local cache with content inline — makes the app feel instant.
    ============================================================ */
 
 // ── Firebase config is loaded from firebase-config.js (included before this file in index.html) ──
@@ -65,14 +67,86 @@ class FolderStructure {
         return false;
     }
 
+    // ── Content-separation helpers ──────────────────────────────
+    // Deep-clone a tree node, stripping `content` from every note so the
+    // tree document stays small (metadata only).
+    _stripContentFromTree(node) {
+        const clone = { ...node };
+        clone.notes = (node.notes || []).map(n => {
+            const c = { ...n };
+            delete c.content;      // remove inline content
+            return c;
+        });
+        clone.subFolders = (node.subFolders || []).map(f => this._stripContentFromTree(f));
+        return clone;
+    }
+
+    // Walk the tree and collect { noteId, content } for every note that
+    // has non-null content (used during migration).
+    _collectContentEntries(node, acc = []) {
+        (node.notes || []).forEach(n => {
+            if (n.content != null && n.content !== '') {
+                acc.push({ noteId: n.id, content: n.content });
+            }
+        });
+        (node.subFolders || []).forEach(f => this._collectContentEntries(f, acc));
+        return acc;
+    }
+
+    // Write a single note's content to its own Firestore document.
+    async saveNoteContent(uid, noteId, content) {
+        if (!uid || !noteId) return;
+        try {
+            await firestore.collection('users').doc(uid)
+                .collection('vault').doc('notes')
+                .collection('items').doc(noteId)
+                .set({ content, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        } catch (err) {
+            console.error(`Failed to save content for note ${noteId}:`, err);
+        }
+    }
+
+    // Read a single note's content from Firestore and populate note.content in-memory.
+    async loadNoteContent(uid, noteId) {
+        if (!uid || !noteId) return null;
+        try {
+            const doc = await firestore.collection('users').doc(uid)
+                .collection('vault').doc('notes')
+                .collection('items').doc(noteId)
+                .get();
+            if (doc.exists && doc.data().content != null) {
+                return doc.data().content;
+            }
+        } catch (err) {
+            console.error(`Failed to load content for note ${noteId}:`, err);
+        }
+        return null;
+    }
+
+    // Delete a single note's content document from Firestore.
+    async deleteNoteContent(uid, noteId) {
+        if (!uid || !noteId) return;
+        try {
+            await firestore.collection('users').doc(uid)
+                .collection('vault').doc('notes')
+                .collection('items').doc(noteId)
+                .delete();
+        } catch (err) {
+            console.warn(`Could not delete content doc for note ${noteId}:`, err);
+        }
+    }
+
     // Cloud
     async saveToCloud(uid) {
         setSyncState('saving');
         try {
+            // Strip inline content so the tree document stays under 1 MB.
+            // Content is kept in-memory and in localStorage cache.
+            const cleanTree = this._stripContentFromTree(this.root);
             await firestore.collection('users').doc(uid)
                 .collection('vault').doc('tree')
-                .set({ tree: JSON.stringify(this.root), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-            this._saveCache();
+                .set({ tree: JSON.stringify(cleanTree), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            this._saveCache();  // cache retains content for fast reload
             setSyncState('saved');
         } catch(err) {
             console.error('Cloud save failed:', err);
@@ -85,11 +159,62 @@ class FolderStructure {
             const doc = await firestore.collection('users').doc(uid)
                 .collection('vault').doc('tree').get();
             if (doc.exists && doc.data().tree) {
-                this.root = JSON.parse(doc.data().tree);
+                const loadedRoot = JSON.parse(doc.data().tree);
+
+                // ── Auto-migration: move inline content to separate docs ──
+                const inlineEntries = this._collectContentEntries(loadedRoot);
+                if (inlineEntries.length > 0) {
+                    console.log(`Migrating ${inlineEntries.length} inline content entries to separate docs…`);
+                    for (const entry of inlineEntries) {
+                        await this.saveNoteContent(uid, entry.noteId, entry.content);
+                    }
+                    // Strip content from tree and re-save the clean version
+                    const cleanRoot = this._stripContentFromTree(loadedRoot);
+                    await firestore.collection('users').doc(uid)
+                        .collection('vault').doc('tree')
+                        .set({ tree: JSON.stringify(cleanRoot), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                    // Keep content in-memory so the app works immediately
+                    this.root = loadedRoot;
+                    showToast('Vault upgraded for better reliability ✓', 'info');
+                } else {
+                    // Merge with any cached content already in-memory
+                    this._mergeContentFromCache(loadedRoot);
+                    this.root = loadedRoot;
+                }
+
                 this._saveCache(); return true;
             }
         } catch(err) { console.error('Cloud load failed:', err); }
         return false;
+    }
+
+    // After loading a content-free tree from Firestore, merge any content
+    // that was available in the localStorage cache so it's immediately usable.
+    _mergeContentFromCache(loadedRoot) {
+        try {
+            const cacheKey = this._cacheKey();
+            const raw = localStorage.getItem(cacheKey);
+            if (!raw) return;
+            const cached = JSON.parse(raw);
+            this._applyContentFromCachedTree(loadedRoot, cached);
+        } catch (_) {}
+    }
+
+    // Recursively copy note.content from a cached tree into a freshly loaded tree.
+    _applyContentFromCachedTree(target, source) {
+        if (!target || !source) return;
+        const sourceNotesMap = new Map((source.notes || []).map(n => [n.id, n]));
+        (target.notes || []).forEach(n => {
+            const cached = sourceNotesMap.get(n.id);
+            if (cached && cached.content != null && n.content == null) {
+                n.content = cached.content;
+            }
+        });
+        const sourceFoldersMap = new Map((source.subFolders || []).map(f => [f.id, f]));
+        (target.subFolders || []).forEach(f => {
+            const cachedFolder = sourceFoldersMap.get(f.id);
+            if (cachedFolder) this._applyContentFromCachedTree(f, cachedFolder);
+        });
     }
 
     // Tree ops
@@ -319,6 +444,8 @@ async function deleteNoteArtifacts(noteId) {
     } catch(err) {
         console.warn('Could not delete AI chat history:', err);
     }
+    // Also delete the separate content document
+    await db.deleteNoteContent(currentUser.uid, noteId);
 }
 async function deleteFolderArtifacts(folderId) {
     const folder = db.findById(folderId);
@@ -643,7 +770,7 @@ function buildFolderCardHtml(folder, showLocation=false) {
 }
 
 function buildNoteCardHtml(note, showLocation=false) {
-    const meta=getFileMeta(note), canView=note.content||note.storageRef;
+    const meta=getFileMeta(note), canView=note.content||note.storageRef||note.fileKind==='text'||note.fileKind==='docx';
     const clickCls=selectMode?'note-card-selectable':(canView?'note-card-clickable':'');
     const selCls=selectedNotes.has(note.id)?'note-card-selected':'';
     const pinnedIcon=note.pinned?`<button class="note-pin-btn note-pin-btn--active" data-note-id="${note.id}" title="Unpin"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>`:`<button class="note-pin-btn" data-note-id="${note.id}" title="Pin"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>`;
@@ -1125,6 +1252,20 @@ function updateBulkBar(){ const n=selectedNotes.size, el=document.getElementById
 const ALL_PANELS=['panelText','panelMarkdown','panelPdf','panelDocx','panelLoading','panelUnsupported'];
 function showPanel(id){ ALL_PANELS.forEach(p=>document.getElementById(p).style.display='none'); document.getElementById(id).style.display='flex'; }
 
+// Lazy-load note content from Firestore if not already in-memory.
+// Returns true if content is available after the call.
+async function ensureNoteContent(note) {
+    if (note.content != null) return true;
+    if (!currentUser || !currentUser.uid) return false;
+    const content = await db.loadNoteContent(currentUser.uid, note.id);
+    if (content != null) {
+        note.content = content;
+        db._saveCache();  // persist to local cache for next reload
+        return true;
+    }
+    return false;
+}
+
 async function viewFile(note) {
     const meta=getFileMeta(note);
     const badge=document.getElementById('fileViewBadge');
@@ -1139,6 +1280,11 @@ async function viewFile(note) {
 
     switch(note.fileKind) {
         case 'text': {
+            // Lazy-load content from Firestore if not in-memory
+            if (note.content == null) {
+                showPanel('panelLoading');
+                await ensureNoteContent(note);
+            }
             const isMarkdown = /\.(md|markdown)$/i.test(note.name);
             if(isMarkdown && typeof marked !== 'undefined') {
                 showPanel('panelMarkdown');
@@ -1153,6 +1299,11 @@ async function viewFile(note) {
             break;
         }
         case 'docx':
+            // Lazy-load content from Firestore if not in-memory
+            if (note.content == null) {
+                showPanel('panelLoading');
+                await ensureNoteContent(note);
+            }
             showPanel('panelDocx');
             // Sanitize HTML to prevent XSS from malicious DOCX files
             const rawHtml = note.content||'<p style="color:var(--text-3)">No content.</p>';
@@ -1221,19 +1372,23 @@ async function downloadFile(note) {
                 a.rel = 'noopener noreferrer';
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
             }
-        } else if(note.content) {
-            let downloadName = note.name;
-            let mimeType = note.mimeType || 'text/plain';
-            if (note.fileKind === 'docx') {
-                downloadName = downloadName.replace(/\.docx$/i, '.html');
-                mimeType = 'text/html';
-            }
-            const blob=new Blob([note.content],{type:mimeType});
-            const url=URL.createObjectURL(blob);
-            const a=Object.assign(document.createElement('a'),{href:url,download:downloadName});
-            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } else { showToast('No content to download','error'); return; }
+        } else {
+            // Lazy-load content from Firestore if not in-memory
+            if (note.content == null) await ensureNoteContent(note);
+            if(note.content) {
+                let downloadName = note.name;
+                let mimeType = note.mimeType || 'text/plain';
+                if (note.fileKind === 'docx') {
+                    downloadName = downloadName.replace(/\.docx$/i, '.html');
+                    mimeType = 'text/html';
+                }
+                const blob=new Blob([note.content],{type:mimeType});
+                const url=URL.createObjectURL(blob);
+                const a=Object.assign(document.createElement('a'),{href:url,download:downloadName});
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else { showToast('No content to download','error'); return; }
+        }
         showToast(`Downloading ${note.name}`,'info');
     } catch(err){ console.error('Download error:',err); showToast('Download failed','error'); }
 }
@@ -1349,7 +1504,9 @@ const uploader = {
                     const buf=await file.arrayBuffer(), result=await mammoth.convertToHtml({arrayBuffer:buf});
                     const note=db.addNote(uploadFolderId,file.name,size,'docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',sizeB);
                     if(!note){ advance(false); continue; }
-                    note.content=result.value; 
+                    note.content=result.value;
+                    // Save content to its own Firestore document (separate from the tree)
+                    if(currentUser) await db.saveNoteContent(currentUser.uid, note.id, note.content);
                     
                     // Upload to Cloudinary to preserve the original binary for downloading
                     const formData = new FormData();
@@ -1403,7 +1560,11 @@ const uploader = {
                 try {
                     const text=await file.text();
                     const note=db.addNote(uploadFolderId,file.name,size,'text',file.type||'text/plain',sizeB);
-                    if(note) note.content=text;
+                    if(note) {
+                        note.content=text;
+                        // Save content to its own Firestore document (separate from the tree)
+                        if(currentUser) await db.saveNoteContent(currentUser.uid, note.id, text);
+                    }
                     // For text files shared to Class Library, upload to Cloudinary first so we have a URL
                     if(shareToClassLib && note && typeof shareFileToClassLibrary === 'function') {
                         try {
